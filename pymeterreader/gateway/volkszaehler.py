@@ -18,13 +18,13 @@ class VolkszaehlerGateway(BaseGateway):
     DATA_PATH = "data"
     SUFFIX = ".json"
 
-    def __init__(self, url: str, interpolate: bool = True):
+    def __init__(self, url: str, interpolate: bool = True, **kwargs):
         """
          Initialize Volkszaehler Gateway
          :param url: address of middleware
          :param interpolate: If true, hourly values will be interpolated and ushed
          """
-        super().__init__()
+        super().__init__(**kwargs)
         self.url = url
         self.interpolate = interpolate
 
