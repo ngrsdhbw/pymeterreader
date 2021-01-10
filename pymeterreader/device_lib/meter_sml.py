@@ -7,7 +7,7 @@ import typing as tp
 import serial
 from sml import SmlBase, SmlFrame, SmlListEntry
 from pymeterreader.device_lib.serial_reader import SerialReader
-from pymeterreader.device_lib.common import Sample, strip, Device
+from pymeterreader.device_lib.common import Sample, strip, Device, ChannelValue
 
 
 class SmlReader(SerialReader):
@@ -105,9 +105,16 @@ class SmlReader(SerialReader):
                 for sml_entry in sml_list:
                     if sample is None:
                         sample = Sample()
-                    # Try reading the meter_id from sml entries without unit description and OBIS code for meter id
-                    if 'unit' not in sml_entry and '1-0:0.0.9' in sml_entry.get('objName', ''):
-                        sample.meter_id: str = sml_entry.get('value', '')
-                # Add all sml entries to the Sample as channels
-                sample.channels.extend(sml_list)
+                    obis_code: str = sml_entry.get('objName', '')
+                    value = sml_entry.get('value', '')
+                    # Differentiate SML Messages based on whether they contain a unit
+                    if 'unit' in sml_entry:
+                        sample.channels.append(ChannelValue(obis_code, value, sml_entry.get('unit')))
+                    else:
+                        # Determine the meter_id from OBIS code
+                        if '1-0:0.0.9' in obis_code:
+                            sample.meter_id = value
+                        # Add Channels without unit
+                        else:
+                            sample.channels.append(ChannelValue(obis_code, value))
         return sample
