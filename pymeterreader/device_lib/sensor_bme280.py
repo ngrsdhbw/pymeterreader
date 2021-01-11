@@ -199,9 +199,7 @@ class Bme280Reader(BaseReader):
         devices: tp.List[Device] = []
         addresses = ['0x76', '0x77']
         for address in addresses:
-            channels = Bme280Reader(address).poll().channels
-            if channels:
-                devices.append(Device(address,
-                                      protocol='BME280',
-                                      channels=channels))
+            sample = Bme280Reader(address).poll()
+            if sample is not None:
+                devices.append(Device("", address, "BME280", sample.channels))
         return devices
