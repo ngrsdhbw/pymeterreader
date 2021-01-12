@@ -5,7 +5,7 @@ import typing as tp
 import json
 from time import time
 from contextlib import suppress
-from logging import error, debug, info
+from logging import error, debug, info, warning
 import requests
 
 from pymeterreader.core import ChannelDescription, ChannelUploadInfo
@@ -102,12 +102,12 @@ class VolkszaehlerGateway(BaseGateway):
                 uuid = channel_dict.get("uuid", None)
                 title = channel_dict.get("title", None)
                 # Optional arguments
-                type = channel_dict.get("title", "")
+                type = channel_dict.get("type", "")
                 description = channel_dict.get("description", "")
                 if uuid is not None and title is not None:
                     extracted_channels.append(ChannelDescription(uuid, title, type, description))
                 else:
-                    error(f"Could not parse Channel with uuid:{uuid},title:{title}")
+                    warning(f"Could not parse Channel with uuid:{uuid},title:{title},type:{type},description:{description}")
         except requests.exceptions.HTTPError as http_err:
             error(f'Invalid HTTP Response for GET from {channel_url}: {http_err}')
         except requests.exceptions.ConnectionError as conn_err:
