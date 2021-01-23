@@ -20,19 +20,18 @@ class PlainReader(SerialReader):
     PROTOCOL = "PLAIN"
     __START_SEQ = b"/?!\x0D\x0A"
 
-    def __init__(self, meter_id: str, tty: str, send_wakeup_zeros: int = 40, initial_baudrate: int = 300,
+    def __init__(self, meter_address: str, send_wakeup_zeros: int = 40, initial_baudrate: int = 300,
                  baudrate: int = 2400, **kwargs):
         """
         Initialize Plain Meter Reader object
         (See https://wiki.volkszaehler.org/software/obis for OBIS code mapping)
-        :param meter_id: meter identification string (e.g. '1 EMH00 12345678')
-        :param tty: URL specifying the serial Port as required by pySerial serial_for_url()
+        :param meter_address: URL specifying the serial Port as required by pySerial serial_for_url()
         :param send_wakeup_zeros: number of zeros to send ahead of the request string
         :param initial_baudrate: Baudrate used to send the request
         :param baudrate: Baudrate used to read the answer
         :kwargs: parameters for the SerialReader superclass
         """
-        super().__init__(meter_id, tty, baudrate=initial_baudrate, **kwargs)
+        super().__init__(meter_address, baudrate=initial_baudrate, **kwargs)
         self.__wakeup_zeros = send_wakeup_zeros
         self.__initial_baudrate = initial_baudrate
         self.__baudrate = baudrate
@@ -91,7 +90,7 @@ class PlainReader(SerialReader):
     def detect(**kwargs) -> tp.List[Device]:
         # Instantiate this Reader class and call SerialReader.detect_serial_devices()
         # pylint: disable=W0212
-        return PlainReader("irrelevant", "loop://")._detect_serial_devices(**kwargs)
+        return PlainReader("loop://")._detect_serial_devices(**kwargs)
 
     def _discover(self) -> tp.Optional[Device]:
         """

@@ -16,20 +16,19 @@ class SerialReader(BaseReader):
     """
 
     @abstractmethod
-    def __init__(self, meter_id: tp.Union[str, int], tty: str, parity: str = "None", baudrate: int = 9600,
+    def __init__(self, meter_address: str, parity: str = "None", baudrate: int = 9600,
                  bytesize: int = 8, stopbits: int = 1, timeout: int = 5, **kwargs):
         """
         Initialize Meter Reader object
-        :param meter_id: meter identification string (e.g. '1 EMH00 12345678')
-        :param tty: URL specifying the serial Port as required by pySerial serial_for_url()
+        :param meter_address: URL specifying the serial Port as required by pySerial serial_for_url()
         :baudrate: serial baudrate, defaults to 9600
         :bytesize: word size on serial port (Default: 8)
         :parity: serial parity, EVEN, ODD or NONE (Default: NONE)
         :stopbits: Number of stopbits (Default: 1)
         :kwargs: unparsed parameters
         """
-        super().__init__(meter_id, **kwargs)
-        self.serial_url = tty
+        super().__init__(**kwargs)
+        self.serial_url = meter_address
         self._serial_instance = None
         self.baudrate = baudrate
         self.bytesize = bytesize
@@ -70,7 +69,7 @@ class SerialReader(BaseReader):
                 discovered_tty_url = possible_port_info.device
                 # Create new Instance of the current SerialReader implementation
                 # This ensures that the internal state is reset for every discovery
-                serial_reader_implementation = self.__class__("irrelevant", discovered_tty_url, **kwargs)
+                serial_reader_implementation = self.__class__(discovered_tty_url, **kwargs)
                 # Utilize SubClass._discover() to handle implementation specific discovery
                 device = serial_reader_implementation._discover()
                 if device is not None:
