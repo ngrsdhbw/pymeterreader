@@ -7,7 +7,8 @@ from time import time
 from contextlib import suppress
 from logging import error, debug, info
 import requests
-from pymeterreader.core.channel_upload_info import ChannelUploadInfo
+
+from pymeterreader.core import ChannelDescription, ChannelUploadInfo
 from pymeterreader.gateway import BaseGateway
 
 
@@ -84,21 +85,36 @@ class VolkszaehlerGateway(BaseGateway):
                 return time_stamp, value
         return None
 
-    def get_channels(self) -> dict:
+    def get_channels(self) -> [ChannelDescription]:
         """
         Retrieve a dict of channels from the middleware
         """
-        rest_url = self.urljoin(self.url, 'channel.json')
+        channel_url = self.urljoin(self.url, 'channel.json')
+        extracted_channels: tp.List[ChannelDescription] = []
         try:
-            response = requests.get(rest_url)
-            if response.status_code != 200:
-                error(f'GET from {rest_url}: {response}')
-            else:
-                debug(f'GET from {rest_url}: {response}')
-                return json.loads(response.content)['channels']
-        except OSError as err:
-            error(f'Error during GET: {err}')
-        return {}
+            response = requests.get(channel_url)
+            response.raise_for_status()
+            channels_list: tp.List[dict] = json.loads(response.content)['channels']
+            debug(f'GET from {channel_url}: {response}')
+            # Transform untyped response into ChannelDescriptions
+            for channel_dict in channels_list:
+                # Mandatory arguments
+                uuid = channel_dict.get("uuid", None)
+                title = channel_dict.get("title", None)
+                # Optional arguments
+                type = channel_dict.get("title", "")
+                description = channel_dict.get("description", "")
+                if uuid is not None and title is not None:
+                    extracted_channels.append(ChannelDescription(uuid, title, type, description))
+                else:
+                    error(f"Could not parse Channel with uuid:{uuid},title:{title}")
+        except requests.exceptions.HTTPError as http_err:
+            error(f'Invalid HTTP Response for GET from {channel_url}: {http_err}')
+        except requests.exceptions.ConnectionError as conn_err:
+            error(f'Could not connect for GET: {conn_err}')
+        except requests.exceptions.RequestException as req_err:
+            error(f'Unexpected requests error: {req_err}')
+        return extracted_channels
 
     @staticmethod
     def urljoin(*args):
