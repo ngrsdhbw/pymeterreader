@@ -101,23 +101,33 @@ class SmlReader(SerialReader):
         Internal helper to extract relevant information
         :param sml_frame: SmlFrame from parser
         """
-        sample = None
+        channels: tp.List[ChannelValue] = []
+        meter_id = "missing"
         for sml_mesage in sml_frame:
             if 'messageBody' in sml_mesage:
                 sml_list: tp.List[SmlListEntry] = sml_mesage['messageBody'].get('valList', [])
                 for sml_entry in sml_list:
-                    if sample is None:
-                        sample = Sample()
-                    obis_code: str = sml_entry.get('objName', '')
-                    value = sml_entry.get('value', '')
-                    # Differentiate SML Messages based on whether they contain a unit
-                    if 'unit' in sml_entry:
-                        sample.channels.append(ChannelValue(obis_code, value, sml_entry.get('unit')))
-                    else:
+                    channel = SmlReader.__parse_sml_entry(sml_entry)
+                    if channel is not None:
                         # Determine the meter_id from OBIS code
-                        if '1-0:0.0.9' in obis_code:
-                            sample.meter_id = value
-                        # Add Channels without unit
+                        if '1-0:0.0.9' in channel.channel_name:
+                            meter_id = str(channel.value)
+                        # Add all other channels
                         else:
-                            sample.channels.append(ChannelValue(obis_code, value))
-        return sample
+                            channels.append(channel)
+        if len(channels) >= 1:
+            return Sample(meter_id=meter_id, channels=channels)
+        return None
+
+    @staticmethod
+    def __parse_sml_entry(sml_entry: SmlListEntry) -> tp.Optional[ChannelValue]:
+        obis_code: str = sml_entry.get('objName', None)
+        value = sml_entry.get('value', None)
+        if obis_code is None or value is None:
+            logger.warning(f"Invalid SML Entry encountered: obis_code={obis_code} value={value}")
+            return None
+        # Differentiate SML Messages based on whether they contain a unit
+        if 'unit' in sml_entry:
+            return ChannelValue(obis_code, value, sml_entry.get('unit'))
+        else:
+            return ChannelValue(obis_code, value)
