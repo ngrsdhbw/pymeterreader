@@ -7,6 +7,8 @@ import typing as tp
 from dataclasses import dataclass
 from threading import Lock
 
+from construct import Struct, ConstructError, Int16ub as uShort, Int16sb as sShort, Int8ub as uChar, Int8sb as sChar
+
 try:
     from smbus2 import SMBus
 except ImportError:
@@ -19,13 +21,30 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Bme280CalibrationData:
-    calibration_bytes_0to25: bytes
-    calibration_bytes_26to41: bytes
+    dig_T1: int
+    dig_T2: int
+    dig_T3: int
+    dig_P1: int
+    dig_P2: int
+    dig_P3: int
+    dig_P4: int
+    dig_P5: int
+    dig_P6: int
+    dig_P7: int
+    dig_P8: int
+    dig_P9: int
+    dig_H1: int
+    dig_H2: int
+    dig_H3: int
+    dig_H4: int
+    dig_H5: int
+    dig_H6: int
 
 
 class Bme280Reader(BaseReader):
     """
     Reads the Bosch BME280 using I2C
+    Device Documentation: https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf
     """
     PROTOCOL = "BME280"
     # Shared Lock for access to all I2C Busses
@@ -102,10 +121,10 @@ class Bme280Reader(BaseReader):
                         self.__reconfiguration_required = False
                     # Wait for the measurement if running in forced mode
                     if "forced" in self.mode:
-                        time_osrs_t = 2.3 * self.temperature_oversampling
-                        time_osrs_p = 2.3 * self.pressure_oversampling + 0.575
-                        time_osrs_h = 2.3 * self.humidity_oversampling + 0.575
-                        measurement_time = 1.25 + time_osrs_t + time_osrs_p + time_osrs_h
+                        osrs_t_time = 2.3 * self.temperature_oversampling
+                        osrs_p_time = 2.3 * self.pressure_oversampling + 0.575
+                        osrs_h_time = 2.3 * self.humidity_oversampling + 0.575
+                        measurement_time = 1.25 + osrs_t_time + osrs_p_time + osrs_h_time
                         # Wait for measurement to complete
                         time.sleep(measurement_time / 1000)
                         # Read measuring status from bit 3
@@ -115,11 +134,77 @@ class Bme280Reader(BaseReader):
                             return None
                     # Read measurement registers
                     measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
+            # Calculate fine temperature to enable temperature compensation for the other measurements
+            fine_temperature = self.calculate_fine_temperature(self.__calibration_data, measurement[3], measurement[4],
+                                                               measurement[5])
+            temperature = self.calculate_temperature(fine_temperature)
+            pressure = self.calculate_pressure(self.__calibration_data, measurement[0], measurement[1], measurement[2],
+                                               fine_temperature)
+            humidity = self.calculate_pressure(self.__calibration_data, measurement[6], measurement[7],
+                                               fine_temperature)
             pass
         except OSError:
             pass
+        except ConstructError:
+            pass
         return None
         # meter id from hashsum
+
+    @staticmethod
+    def calculate_temperature(t_fine: int) -> float:
+        pass
+
+    @staticmethod
+    def calculate_fine_temperature(calibration_data: Bme280CalibrationData, temp_msb: int, temp_lsb: int,
+                                   temp_xlsb_misaligned: int) -> float:
+        # Drop bits 0 to 3
+        temp_xlsb = temp_xlsb_misaligned >> 4
+        # Calculate raw temperature integer
+        temperature_raw = (temp_msb << 16) + (temp_lsb << 8) + temp_xlsb
+        #var1 = temperature_raw / 16384.0 -
+
+    @staticmethod
+    def calculate_pressure(calibration_data: Bme280CalibrationData, press_msb: int, press_lsb: int,
+                           press_xlsb_misaligned: int, t_fine: int) -> float:
+        # Drop bits 0 to 3
+        press_xlsb = press_xlsb_misaligned >> 4
+        # Calculate raw pressure integer
+        pressure_raw = (press_msb << 16) + (press_lsb << 8) + press_xlsb
+
+    @staticmethod
+    def calculate_humidity(calibration_data: Bme280CalibrationData, hum_msb: int, hum_lsb: int, t_fine: int) -> float:
+        # Calculate raw humidity integer
+        humidity_raw = (hum_msb << 8) + hum_lsb
+
+    @staticmethod
+    def parse_calibration_bytes(calibration_0to25: bytes, calibration_26to41: bytes) -> Bme280CalibrationData:
+        # Create Comparison structs
+        calibration_0to25_struct = Struct("dig_T1" / uShort,
+                                          "dig_T2" / sShort,
+                                          "dig_T3" / sShort,
+                                          "dig_P1" / uShort,
+                                          "dig_P2" / sShort,
+                                          "dig_P3" / sShort,
+                                          "dig_P4" / sShort,
+                                          "dig_P5" / sShort,
+                                          "dig_P6" / sShort,
+                                          "dig_P7" / sShort,
+                                          "dig_P8" / sShort,
+                                          "dig_P9" / sShort,
+                                          "dig_H1" / uChar)
+        calibration_26to41_stuct = Struct("dig_H2" / sShort,
+                                          "dig_H3" / uChar,
+                                          "dig_H4" / sShort,
+                                          "dig_H5" / sShort,
+                                          "dig_H6" / sChar)
+        # Parse bytes to container
+        calibration_0to25_container = calibration_0to25_struct.parse(calibration_0to25)
+        calibration_26to41_container = calibration_26to41_stuct.parse(calibration_26to41)
+        # Unpack containers into dataclass
+        calibration_dict = {**calibration_0to25_container, **calibration_26to41_container}
+        # Remove construct container _io object
+        calibration_dict.pop("_io", None)
+        return Bme280CalibrationData(**calibration_dict)
 
     def __read_calibration_data(self, bus: SMBus) -> Bme280CalibrationData:
         """
@@ -127,12 +212,13 @@ class Bme280Reader(BaseReader):
         :param bus: an open i2c bus that is already protected by a Lock
         """
         # Read calibration registers from 0xF0 to 0xA1
-        calibration_bytes_0to25 = bus.read_i2c_block_data(self.i2c_address, 0x88, 26)
+        calibration_0to25 = bus.read_i2c_block_data(self.i2c_address, 0x88, 26)
         # Remove unused register 0xA0
-        calibration_bytes_0to25.pop(24)
+        calibration_0to25.pop(24)
         # Read calibration registers from 0xE1 to 0xE7
-        calibration_bytes_26to41 = bus.read_i2c_block_data(self.i2c_address, 0xE1, 8)
-        return Bme280CalibrationData(bytes(calibration_bytes_0to25), bytes(calibration_bytes_26to41))
+        calibration_26to41 = bus.read_i2c_block_data(self.i2c_address, 0xE1, 8)
+        # Parse bytes in separate function
+        return self.parse_calibration_bytes(bytes(calibration_0to25), bytes(calibration_26to41))
 
     def __set_register_config(self, bus: SMBus, standby_time: float, irr_filter_coefficient: int) -> None:
         """
