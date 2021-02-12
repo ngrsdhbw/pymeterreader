@@ -5,7 +5,6 @@ import logging
 import typing as tp
 from dataclasses import dataclass
 from threading import Lock
-
 try:
     from smbus2 import SMBus
 except ImportError:
@@ -29,7 +28,9 @@ class Bme280Reader(BaseReader):
     I2C_BUS_LOCK = Lock()
     REG_ADDR_CHIP_ID = 0xD0
     REG_ADDR_STATUS = 0xF3
-    REG_ADDR_CONTROL = 0xF4
+    REG_ADDR_CONTROL_MEASUREMENT = 0xF4
+    REG_ADDR_CONTROL_HUMIDITY = 0xF2
+    REG_ADDR_CONFIG = 0xF5
     REG_ADDR_MEASUREMENT_START = 0xFE
 
     def __init__(self,
@@ -48,7 +49,6 @@ class Bme280Reader(BaseReader):
         :param meter_id: is a i2c bus id in this case
         """
         # Test if smbus library has been imported
-
         try:
             from smbus2 import SMBus
         except NameError:
@@ -81,19 +81,25 @@ class Bme280Reader(BaseReader):
         # Read Chip ID
         with Bme280Reader.I2C_BUS_LOCK:
             with SMBus(self.i2c_bus) as bus:
+                chip_id = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CHIP_ID)
                 if self.__calibration_data is None or not self.cache_calibration:
                     self.__calibration_data = self.__read_calibration_data(bus)
                 # Reconfigure sensor
                 if self.__reconfiguration_required:
                     # Put sensor in sleep mode for reconfiguration
                     self.__set_register_ctrl_meas(bus, "sleep", 0, 0)
-                    # Write humidity ...
-                    ##
+                    # Configure humidity
+                    self.__set_register_ctrl_hum(bus,self.humidity_oversampling)
+                    # Configure other measurement parameters
+                    self.__set_register_config(bus,self.standby_time,self.irr_filter_coefficient)
+                    # Activate configuration
+                    self.__set_register_ctrl_meas(bus,self.mode,self.temperature_oversampling,self.pressure_oversampling)
                     self.__reconfiguration_required = False
                 # Read measurement registers
                 measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
-
+        pass
         return None
+        #meter id from hashsum
 
     def __read_calibration_data(self, bus: SMBus) -> Bme280CalibrationData:
         """
@@ -108,9 +114,77 @@ class Bme280Reader(BaseReader):
         calibration_bytes_26to41 = bus.read_i2c_block_data(self.i2c_address, 0xE1, 8)
         return Bme280CalibrationData(bytes(calibration_bytes_0to25),bytes(calibration_bytes_26to41))
 
-    def __set_register_ctrl_meas(self, bus: SMBus,
-                                 mode_str: str,
-                                 temperature_oversampling: int,
+    def __set_register_config(self, bus: SMBus, standby_time: float, irr_filter_coefficient: int) -> None:
+        """
+        This method configures the config register
+        :param bus: an open i2c bus that is already protected by a Lock
+        """
+        # Set the standby time
+        t_sb = 0b000
+        if standby_time == 1000:
+            t_sb = 0b101
+        elif standby_time == 500:
+            t_sb = 0b100
+        elif standby_time == 250:
+            t_sb = 0b011
+        elif standby_time == 125:
+            t_sb = 0b010
+        elif standby_time == 62.5:
+            t_sb = 0b001
+        elif standby_time == 20:
+            t_sb = 0b111
+        elif standby_time == 10:
+            t_sb = 0b110
+        elif standby_time == 0.5:
+            pass
+        else:
+            logger.warning(f"Standby time value {standby_time} is invalid!")
+        # Set irr filter coefficient
+        filter = 0b000
+        if irr_filter_coefficient == 16:
+            filter = 0b100
+        elif irr_filter_coefficient == 8:
+            filter = 0b011
+        elif irr_filter_coefficient == 4:
+            filter = 0b010
+        elif irr_filter_coefficient == 2:
+            filter = 0b001
+        elif irr_filter_coefficient == 0:
+            pass
+        else:
+            logger.warning(f"IRR filter coefficient value {irr_filter_coefficient} is invalid!")
+        # Disable SPI Interface
+        spi3wire_enable = 0
+        # Concatenate bit sequences
+        config_byte = (t_sb << 5) + (filter << 2) + spi3wire_enable
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, config_byte)
+
+    def __set_register_ctrl_hum(self, bus: SMBus, humidity_oversampling: int) -> None:
+        """
+        This method configures the ctrl_hum register
+        :param bus: an open i2c bus that is already protected by a Lock
+        """
+        # Set humidity oversampling
+        osrs_h = 0b000
+        if humidity_oversampling == 16:
+            osrs_h = 0b101
+        elif humidity_oversampling == 8:
+            osrs_h = 0b100
+        elif humidity_oversampling == 4:
+            osrs_h = 0b011
+        elif humidity_oversampling == 2:
+            osrs_h = 0b010
+        elif humidity_oversampling == 1:
+            osrs_h = 0b001
+        elif humidity_oversampling == 0:
+            pass
+        else:
+            logger.warning(f"Humidity oversampling value {humidity_oversampling} is invalid!")
+        # Concatenate bit sequences
+        ctrl_hum_byte = osrs_h
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL_HUMIDITY, ctrl_hum_byte)
+
+    def __set_register_ctrl_meas(self, bus: SMBus, mode_str: str, temperature_oversampling: int,
                                  pressure_oversampling: int) -> None:
         """
         This method configures the ctrl_meas register
@@ -160,7 +234,7 @@ class Bme280Reader(BaseReader):
             logger.warning(f"Measurement mode {mode_str} is invalid!")
         # Concatenate bit sequences
         ctrl_meas_byte = (osrs_t << 5) + (osrs_p << 2) + mode
-        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL, ctrl_meas_byte)
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL_MEASUREMENT, ctrl_meas_byte)
 
     @staticmethod
     def detect(**kwargs) -> tp.List[Device]:
@@ -169,8 +243,10 @@ class Bme280Reader(BaseReader):
         """
         devices: tp.List[Device] = []
         addresses = ['0x76', '0x77']
+        # Only the first i2c_bus is scanned
         for address in addresses:
-            sample = Bme280Reader(address).poll()
+            reader = Bme280Reader(address, cache_calibration=False)
+            sample = reader.poll()
             if sample is not None:
-                devices.append(Device(f"{address}@I2C", address, "BME280", sample.channels))
+                devices.append(Device(sample.meter_id, f"{address}@I2C({reader.i2c_bus})", "BME280", sample.channels))
         return devices
