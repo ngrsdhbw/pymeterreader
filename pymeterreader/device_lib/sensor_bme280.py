@@ -2,9 +2,11 @@
 Reader for BOSCH BME280 sensor.
 """
 import logging
+import time
 import typing as tp
 from dataclasses import dataclass
 from threading import Lock
+
 try:
     from smbus2 import SMBus
 except ImportError:
@@ -14,10 +16,12 @@ from pymeterreader.device_lib.common import Sample, Device
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class Bme280CalibrationData:
-    calibration_bytes_0to25 :bytes
-    calibration_bytes_26to41 :bytes
+    calibration_bytes_0to25: bytes
+    calibration_bytes_26to41: bytes
+
 
 class Bme280Reader(BaseReader):
     """
@@ -31,17 +35,17 @@ class Bme280Reader(BaseReader):
     REG_ADDR_CONTROL_MEASUREMENT = 0xF4
     REG_ADDR_CONTROL_HUMIDITY = 0xF2
     REG_ADDR_CONFIG = 0xF5
-    REG_ADDR_MEASUREMENT_START = 0xFE
+    REG_ADDR_MEASUREMENT_START = 0xF7
 
     def __init__(self,
                  meter_address: tp.Union[str, int],
                  i2c_bus: int = 1,
                  mode: str = "forced",
-                 standby_time: float=1000,
-                 irr_filter_coefficient : int = 0,
-                 humidity_oversampling: int =0,
-                 pressure_oversampling: int =0,
-                 temperature_oversampling: int = 0,
+                 standby_time: float = 1000,
+                 irr_filter_coefficient: int = 0,
+                 humidity_oversampling: int = 2,
+                 pressure_oversampling: int = 2,
+                 temperature_oversampling: int = 2,
                  cache_calibration: bool = True,
                  **kwargs) -> None:
         """
@@ -63,43 +67,59 @@ class Bme280Reader(BaseReader):
         self.pressure_oversampling = pressure_oversampling
         self.cache_calibration = cache_calibration
 
-
-        #FIXME
+        # FIXME
         self.i2c_address = int(meter_address.lower(), 16)
         self.i2c_bus = i2c_bus
         self.mode = mode
 
         self.__reconfiguration_required = True
 
-        self.__calibration_data :tp.Optional[Bme280CalibrationData] = None
+        self.__calibration_data: tp.Optional[Bme280CalibrationData] = None
 
     def poll(self) -> tp.Optional[Sample]:
         """
         Poll device
         :return: True, if successful
         """
-        # Read Chip ID
-        with Bme280Reader.I2C_BUS_LOCK:
-            with SMBus(self.i2c_bus) as bus:
-                chip_id = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CHIP_ID)
-                if self.__calibration_data is None or not self.cache_calibration:
-                    self.__calibration_data = self.__read_calibration_data(bus)
-                # Reconfigure sensor
-                if self.__reconfiguration_required:
-                    # Put sensor in sleep mode for reconfiguration
-                    self.__set_register_ctrl_meas(bus, "sleep", 0, 0)
-                    # Configure humidity
-                    self.__set_register_ctrl_hum(bus,self.humidity_oversampling)
-                    # Configure other measurement parameters
-                    self.__set_register_config(bus,self.standby_time,self.irr_filter_coefficient)
-                    # Activate configuration
-                    self.__set_register_ctrl_meas(bus,self.mode,self.temperature_oversampling,self.pressure_oversampling)
-                    self.__reconfiguration_required = False
-                # Read measurement registers
-                measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
-        pass
+        try:
+            with Bme280Reader.I2C_BUS_LOCK:
+                with SMBus(self.i2c_bus) as bus:
+                    # Read Chip ID
+                    chip_id = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CHIP_ID)
+                    if self.__calibration_data is None or not self.cache_calibration:
+                        self.__calibration_data = self.__read_calibration_data(bus)
+                    # Reconfigure sensor
+                    if self.__reconfiguration_required:
+                        # Put sensor in sleep mode for reconfiguration
+                        self.__set_register_ctrl_meas(bus, "sleep", 0, 0)
+                        # Configure humidity
+                        self.__set_register_ctrl_hum(bus, self.humidity_oversampling)
+                        # Configure other measurement parameters
+                        self.__set_register_config(bus, self.standby_time, self.irr_filter_coefficient)
+                        # Activate configuration
+                        self.__set_register_ctrl_meas(bus, self.mode, self.temperature_oversampling,
+                                                      self.pressure_oversampling)
+                        self.__reconfiguration_required = False
+                    # Wait for the measurement if running in forced mode
+                    if "forced" in self.mode:
+                        time_osrs_t = 2.3 * self.temperature_oversampling
+                        time_osrs_p = 2.3 * self.pressure_oversampling + 0.575
+                        time_osrs_h = 2.3 * self.humidity_oversampling + 0.575
+                        measurement_time = 1.25 + time_osrs_t + time_osrs_p + time_osrs_h
+                        # Wait for measurement to complete
+                        time.sleep(measurement_time / 1000)
+                        # Read measuring status from bit 3
+                        status = bus.read_byte_data(self.i2c_address,Bme280Reader.REG_ADDR_STATUS)
+                        if bool(status >> 3 & 1):
+                            logger.error("Measurement is still in progress after maximum measurement time! Aborting...")
+                            return None
+                    # Read measurement registers
+                    measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
+            pass
+        except OSError:
+            pass
         return None
-        #meter id from hashsum
+        # meter id from hashsum
 
     def __read_calibration_data(self, bus: SMBus) -> Bme280CalibrationData:
         """
@@ -112,7 +132,7 @@ class Bme280Reader(BaseReader):
         calibration_bytes_0to25.pop(24)
         # Read calibration registers from 0xE1 to 0xE7
         calibration_bytes_26to41 = bus.read_i2c_block_data(self.i2c_address, 0xE1, 8)
-        return Bme280CalibrationData(bytes(calibration_bytes_0to25),bytes(calibration_bytes_26to41))
+        return Bme280CalibrationData(bytes(calibration_bytes_0to25), bytes(calibration_bytes_26to41))
 
     def __set_register_config(self, bus: SMBus, standby_time: float, irr_filter_coefficient: int) -> None:
         """
