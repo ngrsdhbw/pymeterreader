@@ -5,9 +5,11 @@ import logging
 import time
 import typing as tp
 from dataclasses import dataclass
+from sys import byteorder
 from threading import Lock
 
-from construct import Struct, ConstructError, Int16ub as uShort, Int16sb as sShort, Int8ub as uChar, Int8sb as sChar
+from construct import Struct, ConstructError, Int16ub as uShort, Int16sb as sShort, Int8ub as uChar, Int8sb as sChar, \
+    BitStruct, Bit, BitsInteger, Padding
 
 try:
     from smbus2 import SMBus
@@ -134,6 +136,10 @@ class Bme280Reader(BaseReader):
                             return None
                     # Read measurement registers
                     measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
+                    # Parse measurement with struct
+                    z = BitStruct("press_raw" / BitsInteger(20),Padding(4),"temp_raw" / BitsInteger(20),Padding(4),"hum_raw" / BitsInteger(16))
+                    x = z.parse(bytes(measurement))
+                    pass
             # Calculate fine temperature to enable temperature compensation for the other measurements
             fine_temperature = self.calculate_fine_temperature(self.__calibration_data, measurement[3], measurement[4],
                                                                measurement[5])
@@ -172,12 +178,16 @@ class Bme280Reader(BaseReader):
         # Drop bits 0 to 3
         press_xlsb = press_xlsb_misaligned >> 4
         # Calculate raw pressure integer
+        z = BitStruct("x" / BitsInteger(20))
+        z.parse([press_msb,press_lsb,press_xlsb])
         pressure_raw = (press_msb << 16) + (press_lsb << 8) + press_xlsb
+        pass
 
     @staticmethod
     def calculate_humidity(calibration_data: Bme280CalibrationData, hum_msb: int, hum_lsb: int, t_fine: int) -> float:
         # Calculate raw humidity integer
         humidity_raw = (hum_msb << 8) + hum_lsb
+        pass
 
     @staticmethod
     def parse_calibration_bytes(calibration_0to25: bytes, calibration_26to41: bytes) -> Bme280CalibrationData:
@@ -265,8 +275,10 @@ class Bme280Reader(BaseReader):
         # Disable SPI Interface
         spi3wire_enable = 0
         # Concatenate bit sequences
-        config_byte = (t_sb << 5) + (filter << 2) + spi3wire_enable
-        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, config_byte)
+        config_byte_struct = BitStruct("t_sb" / BitsInteger(3), "filter" / BitsInteger(3), "spi3wire_enable" / BitsInteger(2))
+        config_byte = config_byte_struct.build({"t_sb": t_sb, "filter": filter, "spi3wire_enable": spi3wire_enable})
+        z = int.from_bytes(config_byte, byteorder )
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, z)
 
     def __set_register_ctrl_hum(self, bus: SMBus, humidity_oversampling: int) -> None:
         """
