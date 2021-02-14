@@ -207,9 +207,10 @@ class Bme280Reader(BaseReader):
                                           "dig_H1" / uChar)
         calibration_26to41_stuct = Struct("dig_H2" / sShort,
                                           "dig_H3" / uChar,
-                                          "dig_H4" / sShort,
-                                          "dig_H5" / sShort,
+                                          "z" / BitStruct("dig_H4" / BitsInteger(12),
+                                                    "dig_H5" / BitsInteger(12)),
                                           "dig_H6" / sChar)
+        #bit endinanness wrong?
         # Parse bytes to container
         calibration_0to25_container = calibration_0to25_struct.parse(calibration_0to25)
         calibration_26to41_container = calibration_26to41_stuct.parse(calibration_26to41)
@@ -229,7 +230,7 @@ class Bme280Reader(BaseReader):
         # Remove unused register 0xA0
         calibration_0to25.pop(24)
         # Read calibration registers from 0xE1 to 0xE7
-        calibration_26to41 = bus.read_i2c_block_data(self.i2c_address, 0xE1, 8)
+        calibration_26to41 = bus.read_i2c_block_data(self.i2c_address, 0xE1, 7)
         # Parse bytes in separate function
         return self.parse_calibration_bytes(bytes(calibration_0to25), bytes(calibration_26to41))
 
