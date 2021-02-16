@@ -5,6 +5,7 @@ import logging
 import time
 import typing as tp
 from dataclasses import dataclass
+from hashlib import sha256
 from sys import byteorder as endianness
 from threading import Lock
 
@@ -16,12 +17,12 @@ try:
 except ImportError:
     pass
 from pymeterreader.device_lib.base import BaseReader
-from pymeterreader.device_lib.common import Sample, Device
+from pymeterreader.device_lib.common import Sample, Device, ChannelValue
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(eq=True,frozen=True)
 class Bme280CalibrationData:
     dig_T1: int
     dig_T2: int
@@ -130,6 +131,7 @@ class Bme280Reader(BaseReader):
         Poll device
         :return: True, if successful
         """
+        # TODO introduce id comparison
         try:
             with Bme280Reader.I2C_BUS_LOCK:
                 with SMBus(self.i2c_bus) as bus:
@@ -164,21 +166,26 @@ class Bme280Reader(BaseReader):
                             return None
                     # Read measurement registers
                     measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
-                    # Parse measurement
-                    measurement_container = Bme280Reader.STRUCT_MEASUREMENT.parse(bytes(measurement))
+            # Parse measurement
+            measurement_container = Bme280Reader.STRUCT_MEASUREMENT.parse(bytes(measurement))
             # Calculate fine temperature to enable temperature compensation for the other measurements
             fine_temperature = self.calculate_fine_temperature(self.__calibration_data, measurement_container.temp_raw)
+            # Calculate measurement results
             temperature = self.calculate_temperature(fine_temperature)
             pressure = self.calculate_pressure(self.__calibration_data, measurement_container.press_raw,
                                                fine_temperature)
             humidity = self.calculate_pressure(self.__calibration_data, measurement_container.hum_raw, fine_temperature)
-            pass
+            # Determine meter_id
+            meter_id = self.derive_meter_id(self.__calibration_data, chip_id)
+            # Return Sample
+            return Sample(meter_id=meter_id, channels=[ChannelValue('TEMPERATURE', temperature, '°C'),
+                                                       ChannelValue('PRESSURE', pressure, 'Pa'),
+                                                       ChannelValue('HUMIDITY', humidity, '%')])
         except OSError:
             pass
         except ConstructError as c:
             pass
         return None
-        # meter id from hashsum
 
     @staticmethod
     def calculate_temperature(t_fine: int) -> float:
@@ -390,6 +397,27 @@ class Bme280Reader(BaseReader):
         ctrl_meas_byte = ctrl_meas_struct.build({"osrs_t": osrs_t, "osrs_p": osrs_p, "mode": mode})
         ctrl_meas_int = int.from_bytes(ctrl_meas_byte, endianness)
         bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL_MEASUREMENT, ctrl_meas_int)
+
+    @staticmethod
+    def derive_meter_id(calibration_data: Bme280CalibrationData, chip_id: int = 0) -> str:
+        """
+        This method calculates a unique identifier for a sensor by hashing it´s calibration data
+        :param calibration_data: Calibration Data from the sensor which should be identified by the meter_id
+        :param chip_id: the optional chip id identifies the series of the sensor
+        :return: str uniquely identifying the sensor
+        """
+        calibration_hash = sha256(str(calibration_data).encode())
+        # Prefixing the sensor type guards against calibration data collisions between different sensor types
+        if chip_id == 0x60:
+            sensor_type = "BME280-"
+        elif chip_id in [0x56, 0x57]:
+            sensor_type = "BMP280(Sample)-"
+        elif chip_id == 0x58:
+            sensor_type = "BMP280-"
+        else:
+            # meter_id matching will still succeed when the prefix is not explicitly specified
+            sensor_type = ""
+        return f"{sensor_type}{calibration_hash.hexdigest()}"
 
     @staticmethod
     def detect(**kwargs) -> tp.List[Device]:
