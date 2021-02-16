@@ -187,17 +187,41 @@ class Bme280Reader(BaseReader):
     @staticmethod
     def calculate_fine_temperature(calibration_data: Bme280CalibrationData, temp_raw: int) -> float:
         var1 = (temp_raw / 16384.0 - calibration_data.dig_T1 / 1024.0) * calibration_data.dig_T2
-        var2 = ((temp_raw / 131072.0 - calibration_data.dig_T1 / 8192.0) * (
-                    temp_raw / 131072.0 - calibration_data.dig_T1 / 8192.0)) * calibration_data.dig_T3
-        return var1+var2
+        var2 = (
+                       (temp_raw / 131072.0 - calibration_data.dig_T1 / 8192.0)
+                       * (temp_raw / 131072.0 - calibration_data.dig_T1 / 8192.0)
+               ) * calibration_data.dig_T3
+        return var1 + var2
 
     @staticmethod
     def calculate_pressure(calibration_data: Bme280CalibrationData, press_raw: int, t_fine: int) -> float:
-        pass
+        var1 = (t_fine / 2.0) - 64000.0
+        var2 = var1 * var1 * (calibration_data.dig_P6) / 32768.0
+        var2 = var2 + var1 * (calibration_data.dig_P5) * 2.0
+        var2 = (var2 / 4.0) + (calibration_data.dig_P4 * 65536.0)
+        var1 = (calibration_data.dig_P3 * var1 * var1 / 524288.0 + calibration_data.dig_P2 * var1) / 524288.0
+        var1 = (1.0 + var1 / 32768.0) * calibration_data.dig_P1
+        if var1 == 0.0:
+            return 0.0
+        p = 1048576.0 - press_raw
+        p = (p - (var2 / 4096.0)) * 6250.0 / var1
+        var1 = calibration_data.dig_P9 * p * p / 2147483648.0
+        var2 = p * calibration_data.dig_P8 / 32768.0
+        p = p + (var1 + var2 + calibration_data.dig_P7) / 16.0
+        return p
 
     @staticmethod
     def calculate_humidity(calibration_data: Bme280CalibrationData, hum_raw: int, t_fine: int) -> float:
-        pass
+        var_H = t_fine - 76800.0
+        var_H = (hum_raw - ((
+        calibration_data.dig_H4) *64.0 + calibration_data.dig_H5 / 16384.0 * var_H)) *(calibration_data.dig_H2 / 65536.0 * (
+                    1.0 +calibration_data.dig_H6 / 67108864.0 * var_H * (1.0 + calibration_data.dig_H3 / 67108864.0 * var_H)))
+        var_H = var_H * (1.0 - calibration_data.dig_H1 * var_H / 524288.0)
+        if var_H > 100.0:
+            var_H = 100.0
+        elif var_H < 0.0:
+            var_H = 0.0
+        return var_H
 
     @staticmethod
     def parse_calibration_bytes(calibration_segment1: bytes, calibration_segment2: bytes) -> Bme280CalibrationData:
