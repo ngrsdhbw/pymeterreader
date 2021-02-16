@@ -5,11 +5,11 @@ import logging
 import time
 import typing as tp
 from dataclasses import dataclass
-from sys import byteorder
+from sys import byteorder as endianness
 from threading import Lock
 
 from construct import Struct, ConstructError, Int16un as uShort, Int16sn as sShort, Int8un as uChar, Int8sn as sChar, \
-    BitStruct, BitsInteger, Padding
+    BitStruct, BitsInteger, Padding, Bit
 
 try:
     from smbus2 import SMBus
@@ -59,6 +59,12 @@ class Bme280Reader(BaseReader):
     REG_ADDR_MEASUREMENT_START = 0xF7
     REG_ADDR_CALIBRATION1_START = 0x88
     REG_ADDR_CALIBRATION2_START = 0xE1
+    STRUCT_STATUS = BitStruct(Padding(4), "measuring" / Bit, Padding(2), "im_update" / Bit)
+    STRUCT_MEASUREMENT = BitStruct("press_raw" / BitsInteger(20),
+                                   Padding(4),
+                                   "temp_raw" / BitsInteger(20),
+                                   Padding(4),
+                                   "hum_raw" / BitsInteger(16))
     STRUCT_CALIBRATION1 = Struct("dig_T1" / uShort,
                                  "dig_T2" / sShort,
                                  "dig_T3" / sShort,
@@ -151,25 +157,21 @@ class Bme280Reader(BaseReader):
                         measurement_time = 1.25 + osrs_t_time + osrs_p_time + osrs_h_time
                         # Wait for measurement to complete
                         time.sleep(measurement_time / 1000)
-                        # Read measuring status from bit 3
+                        # Read measuring status
                         status = bus.read_byte_data(self.i2c_address,Bme280Reader.REG_ADDR_STATUS)
-                        if bool(status >> 3 & 1):
+                        if Bme280Reader.STRUCT_STATUS.parse(status.to_bytes(1, endianness)) == 1:
                             logger.error("Measurement is still in progress after maximum measurement time! Aborting...")
                             return None
                     # Read measurement registers
                     measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
-                    # Parse measurement with struct
-                    z = BitStruct("press_raw" / BitsInteger(20),Padding(4),"temp_raw" / BitsInteger(20),Padding(4),"hum_raw" / BitsInteger(16))
-                    x = z.parse(bytes(measurement))
-                    pass
+                    # Parse measurement
+                    measurement_container = Bme280Reader.STRUCT_MEASUREMENT.parse(bytes(measurement))
             # Calculate fine temperature to enable temperature compensation for the other measurements
-            fine_temperature = self.calculate_fine_temperature(self.__calibration_data, measurement[3], measurement[4],
-                                                               measurement[5])
+            fine_temperature = self.calculate_fine_temperature(self.__calibration_data, measurement_container.temp_raw)
             temperature = self.calculate_temperature(fine_temperature)
-            pressure = self.calculate_pressure(self.__calibration_data, measurement[0], measurement[1], measurement[2],
+            pressure = self.calculate_pressure(self.__calibration_data, measurement_container.press_raw,
                                                fine_temperature)
-            humidity = self.calculate_pressure(self.__calibration_data, measurement[6], measurement[7],
-                                               fine_temperature)
+            humidity = self.calculate_pressure(self.__calibration_data, measurement_container.hum_raw, fine_temperature)
             pass
         except OSError:
             pass
@@ -183,8 +185,7 @@ class Bme280Reader(BaseReader):
         return t_fine / 5120.0
 
     @staticmethod
-    def calculate_fine_temperature(calibration_data: Bme280CalibrationData, temp_msb: int, temp_lsb: int,
-                                   temp_xlsb_misaligned: int) -> float:
+    def calculate_fine_temperature(calibration_data: Bme280CalibrationData, temp_raw: int) -> float:
         # Drop bits 0 to 3
         temp_xlsb = temp_xlsb_misaligned >> 4
         # Calculate raw temperature integer
@@ -195,32 +196,23 @@ class Bme280Reader(BaseReader):
         return var1+var2
 
     @staticmethod
-    def calculate_pressure(calibration_data: Bme280CalibrationData, press_msb: int, press_lsb: int,
-                           press_xlsb_misaligned: int, t_fine: int) -> float:
-        # Drop bits 0 to 3
-        press_xlsb = press_xlsb_misaligned >> 4
-        # Calculate raw pressure integer
-        z = BitStruct("x" / BitsInteger(20))
-        z.parse([press_msb,press_lsb,press_xlsb])
-        pressure_raw = (press_msb << 16) + (press_lsb << 8) + press_xlsb
+    def calculate_pressure(calibration_data: Bme280CalibrationData, press_raw: int, t_fine: int) -> float:
         pass
 
     @staticmethod
-    def calculate_humidity(calibration_data: Bme280CalibrationData, hum_msb: int, hum_lsb: int, t_fine: int) -> float:
-        # Calculate raw humidity integer
-        humidity_raw = (hum_msb << 8) + hum_lsb
+    def calculate_humidity(calibration_data: Bme280CalibrationData, hum_raw: int, t_fine: int) -> float:
         pass
 
     @staticmethod
     def parse_calibration_bytes(calibration_segment1: bytes, calibration_segment2: bytes) -> Bme280CalibrationData:
         # Parse bytes to container
-        calibration_0to25_container = Bme280Reader.STRUCT_CALIBRATION1.parse(calibration_segment1)
-        calibration_26to41_container = Bme280Reader.STRUCT_CALIBRATION2.parse(calibration_segment2)
+        calibration_segment1_container = Bme280Reader.STRUCT_CALIBRATION1.parse(calibration_segment1)
+        calibration_segment2_container = Bme280Reader.STRUCT_CALIBRATION2.parse(calibration_segment2)
         # Bit order from the sensor does not allow for parsing dig_H4 and dig_h5 inside of a BitStruct with BitsInteger
         # Required order is 0xE4,0xE5[right 4 Bits],0xE6,0xE5[left 4 Bits]
         reorder_struct = BitStruct("byte_0xE4" / BitsInteger(8), "bits_0xE5_right" / BitsInteger(4),
                                    "byte_OxE6" / BitsInteger(8), "bits_0xE5_left" / BitsInteger(4))
-        reorder_bitsegments = calibration_26to41_container.misaligned_bitsegment
+        reorder_bitsegments = calibration_segment2_container.pop("misaligned_bitsegment")
         reorder_bitsegments.pop("_io", None)
         # Recreate bytes with correct order
         reordered_bytes = reorder_struct.build(reorder_bitsegments)
@@ -229,7 +221,7 @@ class Bme280Reader(BaseReader):
         # Parse bytes to container
         humidity_container = humidity_struct.parse(reordered_bytes)
         # Unpack containers into dataclass
-        calibration_dict = {**calibration_0to25_container, **calibration_26to41_container, **humidity_container}
+        calibration_dict = {**calibration_segment1_container, **calibration_segment2_container, **humidity_container}
         # Remove construct container _io object
         calibration_dict.pop("_io", None)
         return Bme280CalibrationData(**calibration_dict)
@@ -292,8 +284,8 @@ class Bme280Reader(BaseReader):
         # Concatenate bit sequences
         config_byte_struct = BitStruct("t_sb" / BitsInteger(3), "filter" / BitsInteger(3), "spi3wire_enable" / BitsInteger(2))
         config_byte = config_byte_struct.build({"t_sb": t_sb, "filter": filter, "spi3wire_enable": spi3wire_enable})
-        z = int.from_bytes(config_byte, byteorder )
-        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, z)
+        config_integer = int.from_bytes(config_byte, endianness)
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, config_integer)
 
     def __set_register_ctrl_hum(self, bus: SMBus, humidity_oversampling: int) -> None:
         """
