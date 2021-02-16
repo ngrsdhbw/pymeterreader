@@ -59,6 +59,26 @@ class Bme280Reader(BaseReader):
     REG_ADDR_MEASUREMENT_START = 0xF7
     REG_ADDR_CALIBRATION1_START = 0x88
     REG_ADDR_CALIBRATION2_START = 0xE1
+    STRUCT_CALIBRATION1 = Struct("dig_T1" / uShort,
+                                 "dig_T2" / sShort,
+                                 "dig_T3" / sShort,
+                                 "dig_P1" / uShort,
+                                 "dig_P2" / sShort,
+                                 "dig_P3" / sShort,
+                                 "dig_P4" / sShort,
+                                 "dig_P5" / sShort,
+                                 "dig_P6" / sShort,
+                                 "dig_P7" / sShort,
+                                 "dig_P8" / sShort,
+                                 "dig_P9" / sShort,
+                                 "dig_H1" / uChar)
+    STRUCT_CALIBRATION2 = Struct("dig_H2" / sShort,
+                                 "dig_H3" / uChar,
+                                 "misaligned_bitsegment" / BitStruct("byte_0xE4" / BitsInteger(8),
+                                                                     "bits_0xE5_left" / BitsInteger(4),
+                                                                     "bits_0xE5_right" / BitsInteger(4),
+                                                                     "byte_OxE6" / BitsInteger(8)),
+                                 "dig_H6" / sChar)
 
     def __init__(self,
                  meter_address: tp.Union[str, int],
@@ -192,43 +212,24 @@ class Bme280Reader(BaseReader):
         pass
 
     @staticmethod
-    def parse_calibration_bytes(calibration_0to25: bytes, calibration_26to41: bytes) -> Bme280CalibrationData:
-        # Create Comparison structs
-        calibration_0to25_struct = Struct("dig_T1" / uShort,
-                                          "dig_T2" / sShort,
-                                          "dig_T3" / sShort,
-                                          "dig_P1" / uShort,
-                                          "dig_P2" / sShort,
-                                          "dig_P3" / sShort,
-                                          "dig_P4" / sShort,
-                                          "dig_P5" / sShort,
-                                          "dig_P6" / sShort,
-                                          "dig_P7" / sShort,
-                                          "dig_P8" / sShort,
-                                          "dig_P9" / sShort,
-                                          "dig_H1" / uChar)
-        calibration_26to41_struct = Struct("dig_H2" / sShort,
-                                          "dig_H3" / uChar,
-                                           "misaligned_struct" / BitStruct("byte_0xE4" / BitsInteger(8),
-                                                                           "bits_0xE5_left" / BitsInteger(4),
-                                                                           "bits_0xE5_right" / BitsInteger(4),
-                                                                           "byte_OxE6" / BitsInteger(8)),
-                                          "dig_H6" / sChar)
+    def parse_calibration_bytes(calibration_segment1: bytes, calibration_segment2: bytes) -> Bme280CalibrationData:
         # Parse bytes to container
-        calibration_0to25_container = calibration_0to25_struct.parse(calibration_0to25)
-        calibration_26to41_container = calibration_26to41_struct.parse(calibration_26to41)
-        # Bit order from the sensor does not allow for parsing inside of the BitStruct with BitsInteger
+        calibration_0to25_container = Bme280Reader.STRUCT_CALIBRATION1.parse(calibration_segment1)
+        calibration_26to41_container = Bme280Reader.STRUCT_CALIBRATION2.parse(calibration_segment2)
+        # Bit order from the sensor does not allow for parsing dig_H4 and dig_h5 inside of a BitStruct with BitsInteger
         # Required order is 0xE4,0xE5[right 4 Bits],0xE6,0xE5[left 4 Bits]
         reorder_struct = BitStruct("byte_0xE4" / BitsInteger(8), "bits_0xE5_right" / BitsInteger(4),
                                    "byte_OxE6" / BitsInteger(8), "bits_0xE5_left" / BitsInteger(4))
-        reorder_bitsegments = calibration_26to41_container.misaligned_struct
+        reorder_bitsegments = calibration_26to41_container.misaligned_bitsegment
         reorder_bitsegments.pop("_io", None)
+        # Recreate bytes with correct order
         reordered_bytes = reorder_struct.build(reorder_bitsegments)
         # Parse the reordered bytes with a Bitstruct
         humidity_struct = BitStruct("dig_H4" / BitsInteger(12), "dig_H5" / BitsInteger(12))
+        # Parse bytes to container
         humidity_container = humidity_struct.parse(reordered_bytes)
         # Unpack containers into dataclass
-        calibration_dict = {**calibration_0to25_container, **calibration_26to41_container,**humidity_container}
+        calibration_dict = {**calibration_0to25_container, **calibration_26to41_container, **humidity_container}
         # Remove construct container _io object
         calibration_dict.pop("_io", None)
         return Bme280CalibrationData(**calibration_dict)
