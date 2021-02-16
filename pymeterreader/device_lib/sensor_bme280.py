@@ -158,7 +158,7 @@ class Bme280Reader(BaseReader):
                         # Wait for measurement to complete
                         time.sleep(measurement_time / 1000)
                         # Read measuring status
-                        status = bus.read_byte_data(self.i2c_address,Bme280Reader.REG_ADDR_STATUS)
+                        status = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_STATUS)
                         if Bme280Reader.STRUCT_STATUS.parse(status.to_bytes(1, endianness)) == 1:
                             logger.error("Measurement is still in progress after maximum measurement time! Aborting...")
                             return None
@@ -213,9 +213,14 @@ class Bme280Reader(BaseReader):
     @staticmethod
     def calculate_humidity(calibration_data: Bme280CalibrationData, hum_raw: int, t_fine: int) -> float:
         var_H = t_fine - 76800.0
-        var_H = (hum_raw - ((
-        calibration_data.dig_H4) *64.0 + calibration_data.dig_H5 / 16384.0 * var_H)) *(calibration_data.dig_H2 / 65536.0 * (
-                    1.0 +calibration_data.dig_H6 / 67108864.0 * var_H * (1.0 + calibration_data.dig_H3 / 67108864.0 * var_H)))
+        var_H = (hum_raw - (calibration_data.dig_H4 * 64.0 + calibration_data.dig_H5 / 16384.0 * var_H)) \
+                * (
+                        calibration_data.dig_H2 / 65536.0
+                        * (
+                                1.0 + calibration_data.dig_H6 / 67108864.0 * var_H
+                                * (1.0 + calibration_data.dig_H3 / 67108864.0 * var_H)
+                        )
+                )
         var_H = var_H * (1.0 - calibration_data.dig_H1 * var_H / 524288.0)
         if var_H > 100.0:
             var_H = 100.0
@@ -392,7 +397,7 @@ class Bme280Reader(BaseReader):
         Add available devices to list
         """
         devices: tp.List[Device] = []
-        addresses = ['0x76', '0x77']
+        addresses = ["0x76", "0x77"]
         # Only the first i2c_bus is scanned
         for address in addresses:
             reader = Bme280Reader(address, cache_calibration=False)
