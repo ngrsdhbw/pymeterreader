@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from sys import byteorder
 from threading import Lock
 
-from construct import Struct, ConstructError, Int16ub as uShort, Int16sb as sShort, Int8ub as uChar, Int8sb as sChar, \
-    BitStruct, Bit, BitsInteger, Padding
+from construct import Struct, ConstructError, Int16un as uShort, Int16sn as sShort, Int8un as uChar, Int8sn as sChar, \
+    BitStruct, BitsInteger, Padding
 
 try:
     from smbus2 import SMBus
@@ -57,6 +57,8 @@ class Bme280Reader(BaseReader):
     REG_ADDR_CONTROL_HUMIDITY = 0xF2
     REG_ADDR_CONFIG = 0xF5
     REG_ADDR_MEASUREMENT_START = 0xF7
+    REG_ADDR_CALIBRATION1_START = 0x88
+    REG_ADDR_CALIBRATION2_START = 0xE1
 
     def __init__(self,
                  meter_address: tp.Union[str, int],
@@ -151,7 +153,7 @@ class Bme280Reader(BaseReader):
             pass
         except OSError:
             pass
-        except ConstructError:
+        except ConstructError as c:
             pass
         return None
         # meter id from hashsum
@@ -205,17 +207,28 @@ class Bme280Reader(BaseReader):
                                           "dig_P8" / sShort,
                                           "dig_P9" / sShort,
                                           "dig_H1" / uChar)
-        calibration_26to41_stuct = Struct("dig_H2" / sShort,
+        calibration_26to41_struct = Struct("dig_H2" / sShort,
                                           "dig_H3" / uChar,
-                                          "z" / BitStruct("dig_H4" / BitsInteger(12),
-                                                    "dig_H5" / BitsInteger(12)),
+                                           "misaligned_struct" / BitStruct("byte_0xE4" / BitsInteger(8),
+                                                                           "bits_0xE5_left" / BitsInteger(4),
+                                                                           "bits_0xE5_right" / BitsInteger(4),
+                                                                           "byte_OxE6" / BitsInteger(8)),
                                           "dig_H6" / sChar)
-        #bit endinanness wrong?
         # Parse bytes to container
         calibration_0to25_container = calibration_0to25_struct.parse(calibration_0to25)
-        calibration_26to41_container = calibration_26to41_stuct.parse(calibration_26to41)
+        calibration_26to41_container = calibration_26to41_struct.parse(calibration_26to41)
+        # Bit order from the sensor does not allow for parsing inside of the BitStruct with BitsInteger
+        # Required order is 0xE4,0xE5[right 4 Bits],0xE6,0xE5[left 4 Bits]
+        reorder_struct = BitStruct("byte_0xE4" / BitsInteger(8), "bits_0xE5_right" / BitsInteger(4),
+                                   "byte_OxE6" / BitsInteger(8), "bits_0xE5_left" / BitsInteger(4))
+        reorder_bitsegments = calibration_26to41_container.misaligned_struct
+        reorder_bitsegments.pop("_io", None)
+        reordered_bytes = reorder_struct.build(reorder_bitsegments)
+        # Parse the reordered bytes with a Bitstruct
+        humidity_struct = BitStruct("dig_H4" / BitsInteger(12), "dig_H5" / BitsInteger(12))
+        humidity_container = humidity_struct.parse(reordered_bytes)
         # Unpack containers into dataclass
-        calibration_dict = {**calibration_0to25_container, **calibration_26to41_container}
+        calibration_dict = {**calibration_0to25_container, **calibration_26to41_container,**humidity_container}
         # Remove construct container _io object
         calibration_dict.pop("_io", None)
         return Bme280CalibrationData(**calibration_dict)
@@ -225,14 +238,14 @@ class Bme280Reader(BaseReader):
         This method reads the calibration data from the sensor
         :param bus: an open i2c bus that is already protected by a Lock
         """
-        # Read calibration registers from 0xF0 to 0xA1
-        calibration_0to25 = bus.read_i2c_block_data(self.i2c_address, 0x88, 26)
+        # Read calibration registers from 0x88 to 0xA1
+        calibration_segment1 = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_CALIBRATION1_START, 26)
         # Remove unused register 0xA0
-        calibration_0to25.pop(24)
+        calibration_segment1.pop(24)
         # Read calibration registers from 0xE1 to 0xE7
-        calibration_26to41 = bus.read_i2c_block_data(self.i2c_address, 0xE1, 7)
+        calibration_segment2 = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_CALIBRATION2_START, 7)
         # Parse bytes in separate function
-        return self.parse_calibration_bytes(bytes(calibration_0to25), bytes(calibration_26to41))
+        return self.parse_calibration_bytes(bytes(calibration_segment1), bytes(calibration_segment2))
 
     def __set_register_config(self, bus: SMBus, standby_time: float, irr_filter_coefficient: int) -> None:
         """
