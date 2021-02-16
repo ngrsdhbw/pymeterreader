@@ -186,13 +186,9 @@ class Bme280Reader(BaseReader):
 
     @staticmethod
     def calculate_fine_temperature(calibration_data: Bme280CalibrationData, temp_raw: int) -> float:
-        # Drop bits 0 to 3
-        temp_xlsb = temp_xlsb_misaligned >> 4
-        # Calculate raw temperature integer
-        temperature_raw = (temp_msb << 16) + (temp_lsb << 8) + temp_xlsb
-        var1 = (temperature_raw / 16384.0 - calibration_data.dig_T1 / 1024.0) * calibration_data.dig_T2
-        var2 = ((temperature_raw / 131072.0 - calibration_data.dig_T1 / 8192.0) * (
-                    temperature_raw / 131072.0 - calibration_data.dig_T1 / 8192.0)) * calibration_data.dig_T3
+        var1 = (temp_raw / 16384.0 - calibration_data.dig_T1 / 1024.0) * calibration_data.dig_T2
+        var2 = ((temp_raw / 131072.0 - calibration_data.dig_T1 / 8192.0) * (
+                    temp_raw / 131072.0 - calibration_data.dig_T1 / 8192.0)) * calibration_data.dig_T3
         return var1+var2
 
     @staticmethod
