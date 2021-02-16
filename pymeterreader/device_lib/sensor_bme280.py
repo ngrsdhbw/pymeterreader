@@ -188,7 +188,7 @@ class Bme280Reader(BaseReader):
         return None
 
     @staticmethod
-    def calculate_temperature(t_fine: int) -> float:
+    def calculate_temperature(t_fine: float) -> float:
         return t_fine / 5120.0
 
     @staticmethod
@@ -201,7 +201,7 @@ class Bme280Reader(BaseReader):
         return var1 + var2
 
     @staticmethod
-    def calculate_pressure(calibration_data: Bme280CalibrationData, press_raw: int, t_fine: int) -> float:
+    def calculate_pressure(calibration_data: Bme280CalibrationData, press_raw: int, t_fine: float) -> float:
         var1 = (t_fine / 2.0) - 64000.0
         var2 = var1 * var1 * (calibration_data.dig_P6) / 32768.0
         var2 = var2 + var1 * (calibration_data.dig_P5) * 2.0
@@ -218,7 +218,7 @@ class Bme280Reader(BaseReader):
         return p
 
     @staticmethod
-    def calculate_humidity(calibration_data: Bme280CalibrationData, hum_raw: int, t_fine: int) -> float:
+    def calculate_humidity(calibration_data: Bme280CalibrationData, hum_raw: int, t_fine: float) -> float:
         var_H = t_fine - 76800.0
         var_H = (hum_raw - (calibration_data.dig_H4 * 64.0 + calibration_data.dig_H5 / 16384.0 * var_H)) \
                 * (
