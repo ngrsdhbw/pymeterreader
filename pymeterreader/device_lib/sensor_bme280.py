@@ -1,5 +1,5 @@
 """
-Reader for BOSCH BME280 sensor.
+Reader for a BOSCH BME280 sensor
 """
 import logging
 import time
@@ -284,8 +284,8 @@ class Bme280Reader(BaseReader):
         # Concatenate bit sequences
         config_byte_struct = BitStruct("t_sb" / BitsInteger(3), "filter" / BitsInteger(3), "spi3wire_enable" / BitsInteger(2))
         config_byte = config_byte_struct.build({"t_sb": t_sb, "filter": filter, "spi3wire_enable": spi3wire_enable})
-        config_integer = int.from_bytes(config_byte, endianness)
-        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, config_integer)
+        config_int = int.from_bytes(config_byte, endianness)
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, config_int)
 
     def __set_register_ctrl_hum(self, bus: SMBus, humidity_oversampling: int) -> None:
         """
@@ -361,8 +361,10 @@ class Bme280Reader(BaseReader):
         else:
             logger.warning(f"Measurement mode {mode_str} is invalid!")
         # Concatenate bit sequences
-        ctrl_meas_byte = (osrs_t << 5) + (osrs_p << 2) + mode
-        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL_MEASUREMENT, ctrl_meas_byte)
+        ctrl_meas_struct = BitStruct("osrs_t" / BitsInteger(3), "osrs_p" / BitsInteger(3), "mode" / BitsInteger(2))
+        ctrl_meas_byte = ctrl_meas_struct.build({"osrs_t": osrs_t, "osrs_p": osrs_p, "mode": mode})
+        ctrl_meas_int = int.from_bytes(ctrl_meas_byte, endianness)
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL_MEASUREMENT, ctrl_meas_int)
 
     @staticmethod
     def detect(**kwargs) -> tp.List[Device]:
