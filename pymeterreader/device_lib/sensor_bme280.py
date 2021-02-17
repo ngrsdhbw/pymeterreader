@@ -126,12 +126,23 @@ class Bme280Reader(BaseReader):
 
         self.__calibration_data: tp.Optional[Bme280CalibrationData] = None
 
+
     def poll(self) -> tp.Optional[Sample]:
         """
-        Poll device
-        :return: True, if successful
+        Public method for polling a Sample from the meter. Enforces that the meter_id matches.
+        :return: Sample, if successful
         """
-        # TODO introduce id comparison
+        sample = self.__fetch_sample()
+        if sample is not None:
+            if self.meter_id_matches(sample):
+                return sample
+        return None
+
+    def __fetch_sample(self) -> tp.Optional[Sample]:
+        """
+        Try to retrieve a Sample from any connected meter with the current configuration
+        :return: Sample, if successful
+        """
         try:
             with Bme280Reader.I2C_BUS_LOCK:
                 with SMBus(self.i2c_bus) as bus:
