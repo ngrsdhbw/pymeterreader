@@ -256,7 +256,7 @@ class Bme280Reader(BaseReader):
         reorder_struct = BitStruct("byte_0xE4" / BitsInteger(8), "bits_0xE5_right" / BitsInteger(4),
                                    "byte_OxE6" / BitsInteger(8), "bits_0xE5_left" / BitsInteger(4))
         reorder_bitsegments = calibration_segment2_container.pop("misaligned_bitsegment")
-        reorder_bitsegments.pop("_io", None)
+        reorder_bitsegments.pop("_io")
         # Recreate bytes with correct order
         reordered_bytes = reorder_struct.build(reorder_bitsegments)
         # Parse the reordered bytes with a Bitstruct
