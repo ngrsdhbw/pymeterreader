@@ -185,7 +185,7 @@ class Bme280Reader(BaseReader):
             temperature = self.calculate_temperature(fine_temperature)
             pressure = self.calculate_pressure(self.__calibration_data, measurement_container.press_raw,
                                                fine_temperature)
-            humidity = self.calculate_pressure(self.__calibration_data, measurement_container.hum_raw, fine_temperature)
+            humidity = self.calculate_humidity(self.__calibration_data, measurement_container.hum_raw, fine_temperature)
             # Determine meter_id
             meter_id = self.derive_meter_id(self.__calibration_data, chip_id)
             # Return Sample
