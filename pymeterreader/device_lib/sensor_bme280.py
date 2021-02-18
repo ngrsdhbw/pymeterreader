@@ -157,6 +157,7 @@ class Bme280Reader(BaseReader):
                     chip_id = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CHIP_ID)
                     if self.__calibration_data is None or not self.cache_calibration:
                         self.__calibration_data = self.__read_calibration_data(bus)
+                    calibration_data = self.__calibration_data
                     # Reconfigure sensor
                     if self.__reconfiguration_required:
                         # Reset sensor to sleep mode for reconfiguration
@@ -187,14 +188,14 @@ class Bme280Reader(BaseReader):
             # Parse measurement
             measurement_container = Bme280Reader.STRUCT_MEASUREMENT.parse(bytes(measurement))
             # Calculate fine temperature to enable temperature compensation for the other measurements
-            fine_temperature = self.calculate_fine_temperature(self.__calibration_data, measurement_container.temp_raw)
+            fine_temperature = self.calculate_fine_temperature(calibration_data, measurement_container.temp_raw)
             # Calculate measurement results
             temperature = self.calculate_temperature(fine_temperature)
-            pressure = self.calculate_pressure(self.__calibration_data, measurement_container.press_raw,
+            pressure = self.calculate_pressure(calibration_data, measurement_container.press_raw,
                                                fine_temperature)
-            humidity = self.calculate_humidity(self.__calibration_data, measurement_container.hum_raw, fine_temperature)
+            humidity = self.calculate_humidity(calibration_data, measurement_container.hum_raw, fine_temperature)
             # Determine meter_id
-            meter_id = self.derive_meter_id(self.__calibration_data, chip_id)
+            meter_id = self.derive_meter_id(calibration_data, chip_id)
             # Return Sample
             return Sample(meter_id=meter_id, channels=[ChannelValue('TEMPERATURE', temperature, '°C'),
                                                        ChannelValue('PRESSURE', pressure, 'Pa'),
