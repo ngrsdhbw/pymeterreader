@@ -304,8 +304,8 @@ class Bme280Reader(BaseReader):
         :param bus: an open i2c bus that is already protected by a Lock
         """
         logger.debug("Reading sensor status")
-        status_byte = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_STATUS)
-        status_struct = Bme280Reader.STRUCT_STATUS.parse(status_byte.to_bytes(1, endianness))
+        status_int = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_STATUS)
+        status_struct = Bme280Reader.STRUCT_STATUS.parse(status_int.to_bytes(1, endianness))
         return bool(status_struct.measuring), bool(status_struct.im_update)
 
     def __reset(self, bus: SMBus) -> None:
