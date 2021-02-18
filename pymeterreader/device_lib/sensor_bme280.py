@@ -9,8 +9,8 @@ from hashlib import sha256
 from sys import byteorder as endianness
 from threading import Lock
 
-from construct import Struct, ConstructError, Int16un as uShort, Int16sn as sShort, Int8un as uChar, Int8sn as sChar, \
-    BitStruct, BitsInteger, Padding, Bit
+from construct import Struct, BitStruct, Int16un as uShort, Int16sn as sShort, Int8un as uChar, Int8sn as sChar, \
+    BitsInteger, Padding, Bit, ConstructError
 
 try:
     from smbus2 import SMBus
