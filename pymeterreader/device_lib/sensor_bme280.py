@@ -47,6 +47,7 @@ class Bme280CalibrationData:
 class Bme280Reader(BaseReader):
     """
     Reads the Bosch BME280 using I2C
+    Measurements are interpreted using 64 bit floating point arithmetic
     Device Documentation: https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf
     """
     PROTOCOL = "BME280"
