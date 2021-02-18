@@ -131,7 +131,6 @@ class Bme280Reader(BaseReader):
 
         self.__calibration_data: tp.Optional[Bme280CalibrationData] = None
 
-
     def poll(self) -> tp.Optional[Sample]:
         """
         Public method for polling a Sample from the meter. Enforces that the meter_id matches.
@@ -350,8 +349,12 @@ class Bme280Reader(BaseReader):
         # Disable SPI Interface
         spi3wire_enable = 0
         # Concatenate bit sequences
-        config_byte_struct = BitStruct("t_sb" / BitsInteger(3), "irr_filter" / BitsInteger(3), "spi3wire_enable" / BitsInteger(2))
-        config_byte = config_byte_struct.build({"t_sb": t_sb, "irr_filter": irr_filter, "spi3wire_enable": spi3wire_enable})
+        config_byte_struct = BitStruct("t_sb" / BitsInteger(3),
+                                       "irr_filter" / BitsInteger(3),
+                                       "spi3wire_enable" / BitsInteger(2))
+        config_byte = config_byte_struct.build({"t_sb": t_sb,
+                                                "irr_filter": irr_filter,
+                                                "spi3wire_enable": spi3wire_enable})
         config_int = int.from_bytes(config_byte, endianness)
         bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, config_int)
 
