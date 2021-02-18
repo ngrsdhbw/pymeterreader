@@ -53,14 +53,17 @@ class Bme280Reader(BaseReader):
     PROTOCOL = "BME280"
     # Shared Lock for access to all I2C Busses
     I2C_BUS_LOCK = Lock()
-    REG_ADDR_CHIP_ID = 0xD0
-    REG_ADDR_STATUS = 0xF3
-    REG_ADDR_CONTROL_MEASUREMENT = 0xF4
-    REG_ADDR_CONTROL_HUMIDITY = 0xF2
-    REG_ADDR_CONFIG = 0xF5
+    # Register addresses
     REG_ADDR_MEASUREMENT_START = 0xF7
-    REG_ADDR_CALIBRATION1_START = 0x88
+    REG_ADDR_CONFIG = 0xF5
+    REG_ADDR_CONTROL_MEASUREMENT = 0xF4
+    REG_ADDR_STATUS = 0xF3
+    REG_ADDR_CONTROL_HUMIDITY = 0xF2
     REG_ADDR_CALIBRATION2_START = 0xE1
+    REG_ADDR_RESET = 0xE0
+    REG_ADDR_CHIP_ID = 0xD0
+    REG_ADDR_CALIBRATION1_START = 0x88
+    # construct Structs for parsing the binary data
     STRUCT_STATUS = BitStruct(Padding(4), "measuring" / Bit, Padding(2), "im_update" / Bit)
     STRUCT_MEASUREMENT = BitStruct("press_raw" / BitsInteger(20),
                                    Padding(4),
@@ -145,7 +148,7 @@ class Bme280Reader(BaseReader):
 
     def __fetch_sample(self) -> tp.Optional[Sample]:
         """
-        Try to retrieve a Sample from any connected meter with the current configuration
+        Try to retrieve a Sample from any connected sensor with the current configuration
         :return: Sample, if successful
         """
         try:
