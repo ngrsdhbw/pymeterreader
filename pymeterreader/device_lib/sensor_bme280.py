@@ -157,11 +157,14 @@ class Bme280Reader(BaseReader):
                     chip_id = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CHIP_ID)
                     if self.__calibration_data is None or not self.cache_calibration:
                         self.__calibration_data = self.__read_calibration_data(bus)
+                    else:
+                        logger.debug("Using cached calibration data")
                     calibration_data = self.__calibration_data
                     # Reconfigure sensor
                     if self.__reconfiguration_required:
                         # Reset sensor to sleep mode for reconfiguration
                         self.__reset(bus)
+                        logger.debug("Reconfiguring sensor")
                         # Configure humidity
                         self.__set_register_ctrl_hum(bus, self.humidity_oversampling)
                         # Configure other measurement parameters
@@ -172,6 +175,7 @@ class Bme280Reader(BaseReader):
                         self.__reconfiguration_required = False
                     # Wait for the measurement if running in forced mode
                     if "forced" in self.mode:
+                        logger.debug("Waiting for measurement to complete in forced mode")
                         osrs_t_time = 2.3 * self.temperature_oversampling
                         osrs_p_time = 2.3 * self.pressure_oversampling + 0.575
                         osrs_h_time = 2.3 * self.humidity_oversampling + 0.575
@@ -184,8 +188,10 @@ class Bme280Reader(BaseReader):
                             logger.error("Measurement is still in progress after maximum measurement time! Aborting...")
                             return None
                     # Read measurement registers
+                    logger.debug("Reading measurement registers")
                     measurement = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_MEASUREMENT_START, 8)
             # Parse measurement
+            logger.debug("Parsing measurement")
             measurement_container = Bme280Reader.STRUCT_MEASUREMENT.parse(bytes(measurement))
             # Calculate fine temperature to enable temperature compensation for the other measurements
             fine_temperature = self.calculate_fine_temperature(calibration_data, measurement_container.temp_raw)
@@ -282,6 +288,7 @@ class Bme280Reader(BaseReader):
         This method reads the calibration data from the sensor
         :param bus: an open i2c bus that is already protected by a Lock
         """
+        logger.debug("Reading sensor calibration data")
         # Read calibration registers from 0x88 to 0xA1
         calibration_segment1 = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_CALIBRATION1_START, 26)
         # Remove unused register 0xA0
@@ -296,6 +303,7 @@ class Bme280Reader(BaseReader):
         This method reads the status from the sensor
         :param bus: an open i2c bus that is already protected by a Lock
         """
+        logger.debug("Reading sensor status")
         status_byte = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_STATUS)
         status_struct = Bme280Reader.STRUCT_STATUS.parse(status_byte.to_bytes(1, endianness))
         return bool(status_struct.measuring), bool(status_struct.im_update)
@@ -305,6 +313,7 @@ class Bme280Reader(BaseReader):
         This method triggers a reset of the sensor
         :param bus: an open i2c bus that is already protected by a Lock
         """
+        logger.debug("Soft-Resetting sensor")
         # Write Reset Sequence 0xB6
         bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_RESET, 0xB6)
 
