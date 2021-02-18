@@ -461,13 +461,13 @@ class Bme280Reader(BaseReader):
     @staticmethod
     def detect(**kwargs) -> tp.List[Device]:
         """
-        Add available devices to list
+        Return list of available devices
         """
         devices: tp.List[Device] = []
         addresses = ["0x76", "0x77"]
         # Only the first i2c_bus is scanned
         for address in addresses:
-            reader = Bme280Reader(address, cache_calibration=False)
+            reader = Bme280Reader(address, cache_calibration=False, **kwargs)
             sample = reader.poll()
             if sample is not None:
                 devices.append(Device(sample.meter_id, f"{address}@I2C({reader.i2c_bus})", "BME280", sample.channels))
