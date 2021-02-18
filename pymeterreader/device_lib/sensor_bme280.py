@@ -159,8 +159,8 @@ class Bme280Reader(BaseReader):
                         self.__calibration_data = self.__read_calibration_data(bus)
                     # Reconfigure sensor
                     if self.__reconfiguration_required:
-                        # Put sensor in sleep mode for reconfiguration
-                        self.__set_register_ctrl_meas(bus, "sleep", 0, 0)
+                        # Reset sensor to sleep mode for reconfiguration
+                        self.__reset(bus)
                         # Configure humidity
                         self.__set_register_ctrl_hum(bus, self.humidity_oversampling)
                         # Configure other measurement parameters
