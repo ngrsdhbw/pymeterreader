@@ -179,8 +179,8 @@ class Bme280Reader(BaseReader):
                         # Wait for measurement to complete
                         time.sleep(measurement_time / 1000)
                         # Read measuring status
-                        status = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_STATUS)
-                        if Bme280Reader.STRUCT_STATUS.parse(status.to_bytes(1, endianness)) == 1:
+                        measuring, _ = self.__read_status(bus)
+                        if measuring is True:
                             logger.error("Measurement is still in progress after maximum measurement time! Aborting...")
                             return None
                     # Read measurement registers
@@ -290,6 +290,23 @@ class Bme280Reader(BaseReader):
         calibration_segment2 = bus.read_i2c_block_data(self.i2c_address, Bme280Reader.REG_ADDR_CALIBRATION2_START, 7)
         # Parse bytes in separate function
         return self.parse_calibration_bytes(bytes(calibration_segment1), bytes(calibration_segment2))
+
+    def __read_status(self, bus: SMBus) -> tp.Tuple[bool, bool]:
+        """
+        This method reads the status from the sensor
+        :param bus: an open i2c bus that is already protected by a Lock
+        """
+        status_byte = bus.read_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_STATUS)
+        status_struct = Bme280Reader.STRUCT_STATUS.parse(status_byte.to_bytes(1, endianness))
+        return bool(status_struct.measuring), bool(status_struct.im_update)
+
+    def __reset(self, bus: SMBus) -> None:
+        """
+        This method triggers a reset of the sensor
+        :param bus: an open i2c bus that is already protected by a Lock
+        """
+        # Write Reset Sequence 0xB6
+        bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_RESET, 0xB6)
 
     def __set_register_config(self, bus: SMBus, standby_time: float, irr_filter_coefficient: int) -> None:
         """
