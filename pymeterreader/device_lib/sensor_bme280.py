@@ -101,6 +101,7 @@ class Bme280Reader(BaseReader):
         """
         Initialize BME280 Reader object
         :param meter_id: is a i2c bus id in this case
+        If cache_calibration is set the meter_id will only be validated once
         """
         # Test if smbus library has been imported
         try:
@@ -136,6 +137,9 @@ class Bme280Reader(BaseReader):
         if sample is not None:
             if self.meter_id_matches(sample):
                 return sample
+            else:
+                # Reset calibration_data to allow for rediscovery even when cache_calibration is active
+                self.__calibration_data = None
         return None
 
     def __fetch_sample(self) -> tp.Optional[Sample]:
