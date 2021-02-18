@@ -22,7 +22,7 @@ from pymeterreader.device_lib.common import Sample, Device, ChannelValue
 logger = logging.getLogger(__name__)
 
 
-@dataclass(eq=True,frozen=True)
+@dataclass(frozen=True)
 class Bme280CalibrationData:
     dig_T1: int
     dig_T2: int
