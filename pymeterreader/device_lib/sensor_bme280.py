@@ -123,7 +123,10 @@ class Bme280Reader(BaseReader):
         self.cache_calibration = cache_calibration
 
         # FIXME
-        self.i2c_address = int(meter_address.lower(), 16)
+        if isinstance(meter_address, str):
+            self.i2c_address = int(meter_address.lower(), 16)
+        elif isinstance(meter_address, int):
+            self.i2c_address = meter_address
         self.i2c_bus = i2c_bus
         self.mode = mode
 
