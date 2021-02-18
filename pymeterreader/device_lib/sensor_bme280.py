@@ -309,15 +309,15 @@ class Bme280Reader(BaseReader):
         else:
             logger.warning(f"Standby time value {standby_time} is invalid!")
         # Set irr filter coefficient
-        filter = 0b000
+        irr_filter = 0b000
         if irr_filter_coefficient == 16:
-            filter = 0b100
+            irr_filter = 0b100
         elif irr_filter_coefficient == 8:
-            filter = 0b011
+            irr_filter = 0b011
         elif irr_filter_coefficient == 4:
-            filter = 0b010
+            irr_filter = 0b010
         elif irr_filter_coefficient == 2:
-            filter = 0b001
+            irr_filter = 0b001
         elif irr_filter_coefficient == 0:
             pass
         else:
@@ -325,8 +325,8 @@ class Bme280Reader(BaseReader):
         # Disable SPI Interface
         spi3wire_enable = 0
         # Concatenate bit sequences
-        config_byte_struct = BitStruct("t_sb" / BitsInteger(3), "filter" / BitsInteger(3), "spi3wire_enable" / BitsInteger(2))
-        config_byte = config_byte_struct.build({"t_sb": t_sb, "filter": filter, "spi3wire_enable": spi3wire_enable})
+        config_byte_struct = BitStruct("t_sb" / BitsInteger(3), "irr_filter" / BitsInteger(3), "spi3wire_enable" / BitsInteger(2))
+        config_byte = config_byte_struct.build({"t_sb": t_sb, "irr_filter": irr_filter, "spi3wire_enable": spi3wire_enable})
         config_int = int.from_bytes(config_byte, endianness)
         bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONFIG, config_int)
 
