@@ -465,7 +465,7 @@ class Bme280Reader(BaseReader):
         Return list of available devices
         """
         devices: tp.List[Device] = []
-        addresses = ["0x76", "0x77"]
+        addresses = [0x76, 0x77]
         # Only the first i2c_bus is scanned
         for address in addresses:
             reader = Bme280Reader(address, cache_calibration=False, **kwargs)
