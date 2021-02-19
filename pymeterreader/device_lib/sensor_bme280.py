@@ -5,6 +5,7 @@ import logging
 import time
 import typing as tp
 from dataclasses import dataclass
+from enum import Enum, unique
 from hashlib import sha256
 from sys import byteorder as endianness
 from threading import Lock
@@ -43,6 +44,13 @@ class Bme280CalibrationData:
     dig_H4: int
     dig_H5: int
     dig_H6: int
+
+
+@unique
+class Bme280SensorMode(Enum):
+    SLEEP = 0
+    FORCED = 1
+    NORMAL = 3
 
 
 class Bme280Reader(BaseReader):
@@ -203,7 +211,7 @@ class Bme280Reader(BaseReader):
                                                       self.pressure_oversampling)
                         self.__reconfiguration_required = False
                     # Wait for the measurement if running in forced mode
-                    if "forced" in self.mode:
+                    if self.mode is Bme280SensorMode.FORCED:
                         logger.debug("Waiting for measurement to complete in forced mode")
                         osrs_t_time = 2.3 * self.temperature_oversampling
                         osrs_p_time = 2.3 * self.pressure_oversampling + 0.575
@@ -422,7 +430,7 @@ class Bme280Reader(BaseReader):
         ctrl_hum_byte = osrs_h
         bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL_HUMIDITY, ctrl_hum_byte)
 
-    def __set_register_ctrl_meas(self, bus: SMBus, mode_str: str, temperature_oversampling: int,
+    def __set_register_ctrl_meas(self, bus: SMBus, mode_enum: Bme280SensorMode, temperature_oversampling: int,
                                  pressure_oversampling: int) -> None:
         """
         This method configures the ctrl_meas register
@@ -462,14 +470,14 @@ class Bme280Reader(BaseReader):
             logger.warning(f"Pressure oversampling value {pressure_oversampling} is invalid!")
         # Determine operation mode
         mode = 0b00
-        if "normal" in mode_str:
+        if mode_enum is Bme280SensorMode.NORMAL:
             mode = 0b11
-        elif "forced" in mode_str:
+        elif mode_enum is Bme280SensorMode.FORCED:
             mode = 0b01
-        elif "sleep" in mode_str:
+        elif mode_enum is Bme280SensorMode.SLEEP:
             pass
         else:
-            logger.warning(f"Measurement mode {mode_str} is invalid!")
+            logger.warning(f"Measurement mode {mode_enum.name} is undefined!")
         # Concatenate bit sequences
         ctrl_meas_struct = BitStruct("osrs_t" / BitsInteger(3), "osrs_p" / BitsInteger(3), "mode" / BitsInteger(2))
         ctrl_meas_byte = ctrl_meas_struct.build({"osrs_t": osrs_t, "osrs_p": osrs_p, "mode": mode})
