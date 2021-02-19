@@ -235,10 +235,10 @@ class Bme280Reader(BaseReader):
             return Sample(meter_id=meter_id, channels=[ChannelValue('TEMPERATURE', temperature, '°C'),
                                                        ChannelValue('PRESSURE', pressure, 'Pa'),
                                                        ChannelValue('HUMIDITY', humidity, '%')])
-        except OSError:
-            pass
-        except ConstructError as c:
-            pass
+        except OSError as err:
+            logger.error(f"Accessing the smbus faild: {err}")
+        except ConstructError as err:
+            logger.error(f"Parsing the binary data failed: {err}")
         return None
 
     @staticmethod
