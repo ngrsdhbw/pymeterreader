@@ -127,28 +127,21 @@ class TestBme280(unittest.TestCase):
         self.assertIn(Device(bm280_testdata.meter_id, "0x76@I2C(1)", "BME280", bm280_testdata.channels), devices)
 
     def test_address_interpretation(self):
-        # Test string validation 0x76
-        self.assertEqual(Bme280Reader.validate_meter_address("0x76"), 0x76)
-        self.assertEqual(Bme280Reader.validate_meter_address("118"), 0x76)
-        self.assertEqual(Bme280Reader.validate_meter_address("0x76@I2C(2)"), 0x76)
-        # Test string validation 0x77
-        self.assertEqual(Bme280Reader.validate_meter_address("0x77"), 0x77)
-        self.assertEqual(Bme280Reader.validate_meter_address("119"), 0x77)
-        self.assertEqual(Bme280Reader.validate_meter_address("0x77@I2C(2)"), 0x77)
-        # Test string validation out of range
-        self.assertEqual(Bme280Reader.validate_meter_address("0x400"), 0x76)
-        self.assertEqual(Bme280Reader.validate_meter_address("1024"), 0x76)
-        # Test int validation 0x76
-        self.assertEqual(Bme280Reader.validate_meter_address(0x76), 0x76)
-        self.assertEqual(Bme280Reader.validate_meter_address(118), 0x76)
-        # Test int validation 0x77
-        self.assertEqual(Bme280Reader.validate_meter_address(0x77), 0x77)
-        self.assertEqual(Bme280Reader.validate_meter_address(119), 0x77)
-        # Test int validation out of range
-        self.assertEqual(Bme280Reader.validate_meter_address(0x400), 0x76)
-        self.assertEqual(Bme280Reader.validate_meter_address(1024), 0x76)
-        # Test default value
-        self.assertEqual(Bme280Reader.validate_meter_address("-"), 0x76)
+        # Test inputs resolving to 0x76
+        inputs_0x76 = ["0x76", "118", "0x76@I2C(2)", 0x76, 118]
+        for i in inputs_0x76:
+            reader = Bme280Reader(meter_address=i)
+            self.assertEqual(reader.i2c_address, 0x76)
+        # Test inputs resolving to 0x76
+        inputs_0x77 = ["0x77", "119", "0x77@I2C(2)", 0x77, 119]
+        for i in inputs_0x77:
+            reader = Bme280Reader(meter_address=i)
+            self.assertEqual(reader.i2c_address, 0x77)
+        # Test invalid inputs resolving to the default
+        inputs_invalid = ["-", "0x400", "1024", 0x400, 1024]
+        for i in inputs_invalid:
+            reader = Bme280Reader(meter_address=i)
+            self.assertEqual(reader.i2c_address, 0x76)
 
 
 def create_testdata_dictstr(self) -> None:

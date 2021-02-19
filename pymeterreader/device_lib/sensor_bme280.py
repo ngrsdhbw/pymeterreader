@@ -122,12 +122,7 @@ class Bme280Reader(BaseReader):
         self.temperature_oversampling = temperature_oversampling
         self.pressure_oversampling = pressure_oversampling
         self.cache_calibration = cache_calibration
-
-        # FIXME
-        if isinstance(meter_address, str):
-            self.i2c_address = int(meter_address.lower(), 16)
-        elif isinstance(meter_address, int):
-            self.i2c_address = meter_address
+        self.i2c_address = self.validate_meter_address(meter_address)
         self.i2c_bus = i2c_bus
         self.mode = mode
 
