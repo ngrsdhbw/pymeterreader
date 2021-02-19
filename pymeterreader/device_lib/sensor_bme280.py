@@ -484,5 +484,5 @@ class Bme280Reader(BaseReader):
             reader = Bme280Reader(address, cache_calibration=False, **kwargs)
             sample = reader.poll()
             if sample is not None:
-                devices.append(Device(sample.meter_id, f"{address}@I2C({reader.i2c_bus})", "BME280", sample.channels))
+                devices.append(Device(sample.meter_id, f"{hex(address)}@I2C({reader.i2c_bus})", "BME280", sample.channels))
         return devices
