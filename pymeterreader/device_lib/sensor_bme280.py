@@ -102,19 +102,28 @@ class Bme280Reader(BaseReader):
 
     def __init__(self,
                  meter_address: tp.Union[str, int],
-                 i2c_bus: int = 1,
                  mode: str = "forced",
+                 i2c_bus: int = 1,
                  standby_time: float = 1000,
                  irr_filter_coefficient: int = 0,
+                 temperature_oversampling: int = 2,
                  humidity_oversampling: int = 2,
                  pressure_oversampling: int = 2,
-                 temperature_oversampling: int = 2,
                  cache_calibration: bool = True,
                  **kwargs) -> None:
         """
-        Initialize BME280 Reader object
-        :param meter_id: is a i2c bus id in this case
-        If cache_calibration is set the meter_id will only be validated once
+        Initialize Bosch BME280 Reader object
+        :param meter_address: I2C sensor address (Default: 0x76)
+        :param mode: Operation mode of the sensor
+        :param i2c_bus: I2C Bus id (Default: 1)
+        :param standby_time: time in milliseconds between sensor measurements in normal mode (Default: 1000)
+        :param irr_filter_coefficient: filter coefficient for measurement smoothing (Default: 0)
+        :param temperature_oversampling: temperature oversampling setting (Default: 2)
+        :param humidity_oversampling: humidity oversampling setting (Default: 2)
+        :param pressure_oversampling: pressure oversampling setting (Default: 2)
+        :param cache_calibration: controls caching of the sensors calibration data.
+        If enabled hot swapping the sensor can not be detected! (Default: True)
+        :kwargs: unparsed parameters
         """
         # Test if smbus library has been imported
         try:
@@ -124,18 +133,26 @@ class Bme280Reader(BaseReader):
                 "Could not import smbus2 library! This library is missing and Bme280Reader can not function without it!")
             raise
         super().__init__(**kwargs)
+        # Parse meter_address to a valid i2c address
+        self.i2c_address = self.validate_meter_address(meter_address)
+        # Interpret sensor mode
+        self.mode = Bme280SensorMode.FORCED
+        if "normal" in mode:
+            self.mode = Bme280SensorMode.NORMAL
+        elif "forced" in mode:
+            pass
+        else:
+            logger.warning(f"Sensor mode can only be forced or normal!")
+        self.i2c_bus = i2c_bus
         self.standby_time = standby_time
         self.irr_filter_coefficient = irr_filter_coefficient
-        self.humidity_oversampling = humidity_oversampling
         self.temperature_oversampling = temperature_oversampling
+        self.humidity_oversampling = humidity_oversampling
         self.pressure_oversampling = pressure_oversampling
         self.cache_calibration = cache_calibration
-        self.i2c_address = self.validate_meter_address(meter_address)
-        self.i2c_bus = i2c_bus
-        self.mode = mode
-
+        # Reconfigure the sensor on first access
         self.__reconfiguration_required = True
-
+        # Initialize calibration data cache
         self.__calibration_data: tp.Optional[Bme280CalibrationData] = None
 
     @staticmethod
