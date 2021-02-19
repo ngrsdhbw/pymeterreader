@@ -48,3 +48,7 @@ def strip(string: str) -> str:
     :return: stripped string
     """
     return ''.join([char for char in string if char in LEGAL_CHARACTERS]).strip().upper()
+
+
+class ConfigurationError(Exception):
+    pass

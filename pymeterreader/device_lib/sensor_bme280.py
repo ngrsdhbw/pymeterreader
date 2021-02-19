@@ -18,7 +18,7 @@ except ImportError:
     # Redefine SMBus to prevent crashes when evaluation the typing annotations
     SMBus = None
 from pymeterreader.device_lib.base import BaseReader
-from pymeterreader.device_lib.common import Sample, Device, ChannelValue
+from pymeterreader.device_lib.common import Sample, Device, ChannelValue, ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +212,7 @@ class Bme280Reader(BaseReader):
                                                        ChannelValue('HUMIDITY', humidity, '%')])
         except OSError:
             pass
-        except ValueError as err:
+        except ConfigurationError as err:
             logger.error(f"Error in configuration:{err}")
         except ConstructError as c:
             pass
@@ -347,7 +347,7 @@ class Bme280Reader(BaseReader):
         elif standby_time == 0.5:
             pass
         else:
-            raise ValueError(f"Standby time value {standby_time} is invalid!")
+            raise ConfigurationError(f"Standby time value {standby_time} is invalid!")
         # Set irr filter coefficient
         irr_filter = 0b000
         if irr_filter_coefficient == 16:
@@ -361,7 +361,7 @@ class Bme280Reader(BaseReader):
         elif irr_filter_coefficient == 0:
             pass
         else:
-            raise ValueError(f"IRR filter coefficient value {irr_filter_coefficient} is invalid!")
+            raise ConfigurationError(f"IRR filter coefficient value {irr_filter_coefficient} is invalid!")
         # Disable SPI Interface
         spi3wire_enable = 0
         # Concatenate bit sequences
@@ -394,7 +394,7 @@ class Bme280Reader(BaseReader):
         elif humidity_oversampling == 0:
             pass
         else:
-            raise ValueError(f"Humidity oversampling value {humidity_oversampling} is invalid!")
+            raise ConfigurationError(f"Humidity oversampling value {humidity_oversampling} is invalid!")
         # Concatenate bit sequences
         ctrl_hum_byte = osrs_h
         bus.write_byte_data(self.i2c_address, Bme280Reader.REG_ADDR_CONTROL_HUMIDITY, ctrl_hum_byte)
@@ -420,7 +420,7 @@ class Bme280Reader(BaseReader):
         elif temperature_oversampling == 0:
             pass
         else:
-            raise ValueError(f"Pressure oversampling value {temperature_oversampling} is invalid!")
+            raise ConfigurationError(f"Pressure oversampling value {temperature_oversampling} is invalid!")
         # Set pressure oversampling
         osrs_p = 0b000
         if pressure_oversampling == 16:
@@ -436,7 +436,7 @@ class Bme280Reader(BaseReader):
         elif pressure_oversampling == 0:
             pass
         else:
-            raise ValueError(f"Pressure oversampling value {pressure_oversampling} is invalid!")
+            raise ConfigurationError(f"Pressure oversampling value {pressure_oversampling} is invalid!")
         # Determine operation mode
         mode = 0b00
         if "normal" in mode_str:
@@ -446,7 +446,7 @@ class Bme280Reader(BaseReader):
         elif "sleep" in mode_str:
             pass
         else:
-            raise ValueError(f"Measurement mode {mode_str} is invalid!")
+            raise ConfigurationError(f"Measurement mode {mode_str} is invalid!")
         # Concatenate bit sequences
         ctrl_meas_struct = BitStruct("osrs_t" / BitsInteger(3), "osrs_p" / BitsInteger(3), "mode" / BitsInteger(2))
         ctrl_meas_byte = ctrl_meas_struct.build({"osrs_t": osrs_t, "osrs_p": osrs_p, "mode": mode})
