@@ -15,7 +15,8 @@ from construct import Struct, BitStruct, Int16un as uShort, Int16sn as sShort, I
 try:
     from smbus2 import SMBus
 except ImportError:
-    pass
+    # Redefine SMBus to prevent crashes when evaluation the typing annotations
+    SMBus = None
 from pymeterreader.device_lib.base import BaseReader
 from pymeterreader.device_lib.common import Sample, Device, ChannelValue
 
