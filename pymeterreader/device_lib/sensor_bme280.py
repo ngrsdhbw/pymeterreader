@@ -144,8 +144,7 @@ class Bme280Reader(BaseReader):
                 return int(address_str, 16)
             elif address_str.isnumeric():
                 return int(address_str)
-            else:
-                logger.error("meter_address str could not be parsed to an int!")
+            logger.error("meter_address str could not be parsed to an int!")
         else:
             logger.error("meter_address could not be parsed as int or str!")
         return None
@@ -158,8 +157,7 @@ class Bme280Reader(BaseReader):
                 logger.warning(f"Untypical address for BME280 specified:{resolved_meter_address}")
             if 0 <= resolved_meter_address < 1024:
                 return resolved_meter_address
-            else:
-                logger.error("I2C Address is out of the 10 Bit range")
+            logger.error("I2C Address is out of the 10 Bit range")
         logger.warning("Using default meter_address 0x76!")
         return 0x76
 
@@ -172,9 +170,8 @@ class Bme280Reader(BaseReader):
         if sample is not None:
             if self.meter_id_matches(sample):
                 return sample
-            else:
-                # Reset calibration_data to allow for rediscovery even when cache_calibration is active
-                self.__calibration_data = None
+            # Reset calibration_data to allow for rediscovery even when cache_calibration is active
+            self.__calibration_data = None
         return None
 
     def __fetch_sample(self) -> tp.Optional[Sample]:
