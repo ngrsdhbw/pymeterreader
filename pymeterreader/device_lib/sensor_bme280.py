@@ -135,6 +135,39 @@ class Bme280Reader(BaseReader):
 
         self.__calibration_data: tp.Optional[Bme280CalibrationData] = None
 
+    @staticmethod
+    def interpret_meter_address(meter_address: tp.Union[str, int]) -> tp.Optional[int]:
+        if isinstance(meter_address, int):
+            return meter_address
+        elif isinstance(meter_address, str):
+            address_segments = meter_address.split("@")
+            if len(address_segments) > 1:
+                logger.warning("@ seperator found in the meter_address!\n"
+                               "If you want to specify the I2C Bus use the Parameter i2c_bus instead!")
+            address_str = address_segments[0].lower()
+            if address_str.startswith("0x"):
+                return int(address_str, 16)
+            elif address_str.isnumeric():
+                return int(address_str)
+            else:
+                logger.error("meter_address str could not be parsed to an int!")
+        else:
+            logger.error("meter_address could not be parsed as int or str!")
+        return None
+
+    @staticmethod
+    def validate_meter_address(meter_address: tp.Union[str, int]) -> int:
+        resolved_meter_address = Bme280Reader.interpret_meter_address(meter_address)
+        if resolved_meter_address is not None:
+            if resolved_meter_address not in [0x76, 0x77]:
+                logger.warning(f"Untypical address for BME280 specified:{resolved_meter_address}")
+            if 0 <= resolved_meter_address < 1024:
+                return resolved_meter_address
+            else:
+                logger.error("I2C Address is out of the 10 Bit range")
+        logger.warning("Using default meter_address 0x76!")
+        return 0x76
+
     def poll(self) -> tp.Optional[Sample]:
         """
         Public method for polling a Sample from the meter. Enforces that the meter_id matches.

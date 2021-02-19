@@ -126,6 +126,30 @@ class TestBme280(unittest.TestCase):
         self.assertEqual(len(devices), 1)
         self.assertIn(Device(bm280_testdata.meter_id, "0x76@I2C(1)", "BME280", bm280_testdata.channels), devices)
 
+    def test_address_interpretation(self):
+        # Test string validation 0x76
+        self.assertEqual(Bme280Reader.validate_meter_address("0x76"), 0x76)
+        self.assertEqual(Bme280Reader.validate_meter_address("118"), 0x76)
+        self.assertEqual(Bme280Reader.validate_meter_address("0x76@I2C(2)"), 0x76)
+        # Test string validation 0x77
+        self.assertEqual(Bme280Reader.validate_meter_address("0x77"), 0x77)
+        self.assertEqual(Bme280Reader.validate_meter_address("119"), 0x77)
+        self.assertEqual(Bme280Reader.validate_meter_address("0x77@I2C(2)"), 0x77)
+        # Test string validation out of range
+        self.assertEqual(Bme280Reader.validate_meter_address("0x400"), 0x76)
+        self.assertEqual(Bme280Reader.validate_meter_address("1024"), 0x76)
+        # Test int validation 0x76
+        self.assertEqual(Bme280Reader.validate_meter_address(0x76), 0x76)
+        self.assertEqual(Bme280Reader.validate_meter_address(118), 0x76)
+        # Test int validation 0x77
+        self.assertEqual(Bme280Reader.validate_meter_address(0x77), 0x77)
+        self.assertEqual(Bme280Reader.validate_meter_address(119), 0x77)
+        # Test int validation out of range
+        self.assertEqual(Bme280Reader.validate_meter_address(0x400), 0x76)
+        self.assertEqual(Bme280Reader.validate_meter_address(1024), 0x76)
+        # Test default value
+        self.assertEqual(Bme280Reader.validate_meter_address("-"), 0x76)
+
 
 def create_testdata_dictstr(self) -> None:
     seq = "REG_ADDR_CHIP_ID:0x60,"
