@@ -53,7 +53,7 @@ REG_ADDR_CALIBRATION1_START = 0x88
 REG_ADDR_CALIBRATION2_START = 0xE1
 REG_ADDR_STATUS = 0xF3
 
-bm280_testdata = I2CTestData(identifier="BME280-078fc53ee157b535d787a94e8ac2f05ed6083c8d21ef77389021ae97961d7d0a",
+bm280_testdata = I2CTestData(meter_id="BME280-078fc53ee157b535d787a94e8ac2f05ed6083c8d21ef77389021ae97961d7d0a",
                              channels=[ChannelValue(channel_name="TEMPERATURE", value=19.272266477266385, unit="°C"),
                                        ChannelValue(channel_name="PRESSURE", value=99855.59723964224, unit="Pa"),
                                        ChannelValue(channel_name="HUMIDITY", value=50.935725617532256, unit="%")],
@@ -110,7 +110,7 @@ class TestBme280(unittest.TestCase):
         reader = Bme280Reader("0x76")
         sample = reader.poll()
         self.assertEqual(bm280_testdata.channels, sample.channels)
-        self.assertEqual(bm280_testdata.identifier, sample.meter_id)
+        self.assertEqual(bm280_testdata.meter_id, sample.meter_id)
 
     @mock.patch("pymeterreader.device_lib.sensor_bme280.SMBus", autospec=True)
     def test_read_wrong_address(self, mock_smbus):
