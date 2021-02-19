@@ -3,7 +3,7 @@ import unittest
 from dataclasses import dataclass
 from unittest import mock
 
-from pymeterreader.device_lib.common import ChannelValue
+from pymeterreader.device_lib.common import ChannelValue, Device
 from pymeterreader.device_lib.sensor_bme280 import Bme280Reader
 from pymeterreader.device_lib.test_meter import TestData
 
@@ -118,6 +118,13 @@ class TestBme280(unittest.TestCase):
         reader = Bme280Reader("0x77")
         sample = reader.poll()
         self.assertIsNone(sample)
+
+    @mock.patch("pymeterreader.device_lib.sensor_bme280.SMBus", autospec=True)
+    def test_detect(self, mock_smbus):
+        mock_smbus.return_value = MockBus(0x76, bm280_testdata)
+        devices = Bme280Reader.detect()
+        self.assertEqual(len(devices), 1)
+        self.assertIn(Device(bm280_testdata.meter_id, "0x76@I2C(1)", "BME280", bm280_testdata.channels), devices)
 
 
 def create_testdata_dictstr(self) -> None:
